@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./hireai.db
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - VISION_PROVIDER=${VISION_PROVIDER:-mock}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-log}
+      - SECRET_KEY=${SECRET_KEY:-changeme}
+      - DEBUG=${DEBUG:-false}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8000}
+    volumes:
+      - ./recordings:/app/recordings
+      - ./uploads:/app/uploads
+      - ./hireai.db:/app/hireai.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

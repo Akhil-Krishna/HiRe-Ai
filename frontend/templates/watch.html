@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HirE.AI — Live Monitor</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+:root{--primary:#4F46E5;--success:#10B981;--danger:#EF4444;--warning:#F59E0B;--bg:#0F172A;--panel:#1E293B;--border:#334155;--text:#F1F5F9;--muted:#94A3B8}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+/* ── Topbar ── */
+.topbar{background:#1A1A2E;border-bottom:1px solid var(--border);padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0;z-index:10}
+.logo{font-size:15px;font-weight:800;color:#818CF8}
+.sep{color:var(--border);font-size:18px}
+.iv-name{font-size:13px;font-weight:600;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;border-radius:12px;font-weight:600}
+.pill-live{background:rgba(16,185,129,.2);color:#34D399;border:1px solid rgba(16,185,129,.4)}
+.pill-wait{background:rgba(148,163,184,.1);color:var(--muted);border:1px solid var(--border)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-live{background:var(--success);animation:pulse 2s infinite}
+.dot-wait{background:var(--muted)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 5px rgba(16,185,129,0)}}
+.tb-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.timer{font-size:15px;font-weight:800;color:var(--warning);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+/* ── Main layout: 3 columns ── */
+.layout{display:grid;grid-template-columns:300px 1fr 340px;flex:1;overflow:hidden}
+/* ── LEFT: cam + flags ── */
+.left-col{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.cam-box{position:relative;background:#000;flex-shrink:0}
+.cam-box video{width:100%;display:block;max-height:220px;object-fit:cover}
+.cam-placeholder{width:100%;height:180px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted);font-size:12px;background:#0A0F1E}
+.cam-label{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);padding:5px 10px;font-size:10px;display:flex;align-items:center;gap:6px}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);animation:pulse 1.5s infinite}
+/* Vision metrics */
+.metrics-box{padding:12px 14px;border-bottom:1px solid var(--border)}
+.metrics-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.metric-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.metric-lbl{font-size:12px;color:var(--muted)}
+.metric-val{font-size:12px;font-weight:700}
+.meter{height:5px;background:#0F172A;border-radius:3px;margin-top:2px;overflow:hidden;width:120px}
+.meter-fill{height:100%;border-radius:3px;transition:width .6s ease}
+/* Flags */
+.flags-box{flex:1;overflow-y:auto;padding:10px 14px}
+.flags-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.flag-item{display:flex;align-items:flex-start;gap:7px;padding:7px 9px;border-radius:7px;margin-bottom:5px;font-size:11.5px;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.f-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#FCD34D}
+.f-danger{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#FCA5A5}
+.f-info{background:rgba(79,70,229,.1);border:1px solid rgba(79,70,229,.25);color:#A5B4FC}
+.f-success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#6EE7B7}
+.flag-txt{flex:1;line-height:1.4}
+.flag-time{font-size:9px;color:var(--muted);margin-top:2px;display:block}
+.flags-empty{text-align:center;padding:20px;color:var(--muted);font-size:12px}
+/* ── MIDDLE: chat ── */
+.mid-col{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.chat-hdr{padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.chat-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:78%;display:flex;flex-direction:column;gap:3px}
+.msg.ai{align-self:flex-start}.msg.candidate,.msg.interviewer{align-self:flex-end}
+.msg-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:0 4px}
+.msg-bbl{padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.msg.ai .msg-bbl{background:#1E293B;border:1px solid #334155;border-radius:4px 12px 12px 12px}
+.msg.candidate .msg-bbl{background:#2D3B55;border-radius:12px 4px 12px 12px}
+.msg.interviewer .msg-bbl{background:#4C1D95;border-radius:12px 4px 12px 12px}
+.msg-code{background:#0D1117;border:1px solid #30363D;border-radius:8px;padding:8px;margin-top:3px;font-family:monospace;font-size:11px;color:#E6EDF3;overflow-x:auto;white-space:pre}
+.msg-new{animation:msgSlide .3s ease}
+@keyframes msgSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ask-bar{padding:10px 12px;border-top:1px solid var(--border);background:var(--panel);flex-shrink:0}
+.ctrl-row{display:flex;gap:8px;margin-bottom:8px}
+.ctrl-btn{flex:1;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;transition:.2s}
+.ctrl-pause{background:rgba(245,158,11,.15);color:#FCD34D;border:1px solid rgba(245,158,11,.3)}.ctrl-pause:hover{background:rgba(245,158,11,.25)}
+.ctrl-resume{background:rgba(16,185,129,.15);color:#34D399;border:1px solid rgba(16,185,129,.3)}.ctrl-resume:hover{background:rgba(16,185,129,.25)}
+.ask-row{display:flex;gap:8px}
+.ask-input{flex:1;background:#0D1117;border:1.5px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;padding:9px 12px;outline:none;font-family:inherit}
+.ask-input:focus{border-color:var(--primary)}
+.ask-btn{padding:9px 16px;background:var(--primary);border:none;color:#fff;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600}
+.ask-btn:hover{background:#3730A3}
+/* ── RIGHT: scores ── */
+.right-col{background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.r-sec{padding:12px 14px;border-bottom:1px solid var(--border)}
+.r-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px}
+.r-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:12.5px}
+.r-val{font-weight:700;font-size:13px}
+.score-card{background:#0F172A;border-radius:10px;padding:12px;margin-bottom:8px;border-top:3px solid var(--primary)}
+.score-num{font-size:26px;font-weight:900;line-height:1}
+.score-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:4px}
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.big-meter{height:8px;background:#0F172A;border-radius:4px;margin-top:6px;overflow:hidden}
+.big-meter-fill{height:100%;border-radius:4px;transition:width .6s ease}
+/* Emotion badges */
+.emo-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.emo-tag{padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:600;background:#1E293B;color:var(--muted)}
+.emo-tag.active{background:rgba(79,70,229,.2);color:#A5B4FC;border:1px solid rgba(79,70,229,.4)}
+/* Misc */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:.2s;text-decoration:none;white-space:nowrap}
+.btn-p{background:var(--primary);color:#fff}.btn-p:hover{background:#3730A3}
+.btn-o{background:transparent;border:1.5px solid var(--border);color:var(--text)}.btn-o:hover{border-color:#6366F1}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+.pulse-new{animation:pulseNew .5s ease}
+@keyframes pulseNew{0%{background:rgba(79,70,229,.2)}100%{background:transparent}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">HirE.AI</span><span class="sep">|</span>
+  <span class="iv-name" id="ivName">Loading...</span>
+  <div id="statusPill" class="pill pill-wait"><div class="dot dot-wait" id="statusDot"></div><span id="statusTxt">Connecting...</span></div>
+  <div class="tb-right">
+    <span class="timer" id="timerEl">00:00</span>
+    <a href="/" class="btn btn-o btn-sm" style="font-size:11px;padding:5px 12px">← Dashboard</a>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- LEFT: Candidate cam feed + vision metrics + flags -->
+  <div class="left-col">
+    <div class="cam-box" id="camBox">
+      <div class="cam-placeholder" id="camPlaceholder">
+        <i class="fas fa-video-slash" style="font-size:28px;opacity:.3"></i>
+        <span>Candidate cam feed</span>
+        <span style="font-size:10px;opacity:.5">Appears when interview starts</span>
+      </div>
+      <video id="remoteVideo" autoplay playsinline style="display:none;width:100%;max-height:220px;object-fit:cover"></video>
+      <canvas id="camCanvas" style="display:none"></canvas>
+      <div class="cam-label" id="camLabel" style="display:none">
+        <div class="rec-dot"></div>
+        <span id="camLabelTxt">Live — Candidate Camera</span>
+      </div>
+    </div>
+
+    <!-- Vision Metrics (full, for HR/Interviewer) -->
+    <div class="metrics-box">
+      <div class="metrics-title">
+        <span><i class="fas fa-chart-line" style="color:var(--primary)"></i> Vision Metrics</span>
+        <span id="frameCount" style="font-size:9px;color:var(--muted)">0 frames</span>
+      </div>
+
+      <div class="metric-row">
+        <div><div class="metric-lbl">Confidence</div>
+          <div class="meter"><div class="meter-fill" id="mConf" style="background:#4F46E5;width:0%"></div></div>
+        </div>
+        <span class="metric-val" id="vConf" style="color:#818CF8">–</span>
+      </div>
+
+      <div class="metric-row">
+        <div><div class="metric-lbl">Engagement</div>
+          <div class="meter"><div class="meter-fill" id="mEng" style="background:#10B981;width:0%"></div></div>
+        </div>
+        <span class="metric-val" id="vEng" style="color:#34D399">–</span>
+      </div>
+
+      <div class="metric-row">
+        <div><div class="metric-lbl">Stress</div>
+          <div class="meter"><div class="meter-fill" id="mStr" style="background:#F59E0B;width:0%"></div></div>
+        </div>
+        <span class="metric-val" id="vStr" style="color:#FCD34D">–</span>
+      </div>
+
+      <div class="metric-row">
+        <div><div class="metric-lbl">Integrity Risk</div>
+          <div class="meter"><div class="meter-fill" id="mCheat" style="background:#EF4444;width:0%"></div></div>
+        </div>
+        <span class="metric-val" id="vCheat" style="color:#FCA5A5">–</span>
+      </div>
+
+      <div class="metric-row" style="margin-top:4px">
+        <span class="metric-lbl">Dominant Emotion</span>
+        <span class="metric-val" id="vEmotion" style="color:#A5B4FC">–</span>
+      </div>
+
+      <div class="metric-row">
+        <span class="metric-lbl">Faces in frame</span>
+        <span class="metric-val" id="vFaces">–</span>
+      </div>
+
+      <div class="metric-row">
+        <span class="metric-lbl">Gaze</span>
+        <span class="metric-val" id="vGaze" style="color:var(--success)">–</span>
+      </div>
+    </div>
+
+    <!-- Flags -->
+    <div class="flags-box">
+      <div class="flags-title">
+        <span><i class="fas fa-shield-halved"></i> Integrity Alerts</span>
+        <span id="flagCount" style="background:#334155;padding:1px 7px;border-radius:10px;font-size:9px">0</span>
+      </div>
+      <div id="flagsList"><div class="flags-empty"><i class="fas fa-shield-check" style="display:block;font-size:20px;margin-bottom:8px;opacity:.4"></i>No alerts yet</div></div>
+    </div>
+  </div>
+
+  <!-- MIDDLE: Chat transcript + controls -->
+  <div class="mid-col" style="overflow-y:auto;">
+    <div class="chat-hdr">
+      <i class="fas fa-comments" style="color:var(--primary)"></i>
+      <span style="font-size:13px;font-weight:600">Live Conversation</span>
+      <span id="msgBadge" class="badge" style="background:#1E293B;margin-left:auto">0 msgs</span>
+      <div class="dot dot-live" style="margin-left:8px" title="Auto-refreshing every 2s"></div>
+    </div>
+    <div class="chat-msgs" id="chatMsgs">
+      <div id="waitMsg" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
+        <i class="fas fa-clock" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>
+        Waiting for interview to start...
+      </div>
+    </div>
+    <div class="ask-bar">
+      <div class="ctrl-row">
+        <button class="ctrl-btn ctrl-pause" id="pauseBtn" onclick="pauseAI()"><i class="fas fa-pause"></i> Pause AI</button>
+        <button class="ctrl-btn ctrl-resume" id="resumeBtn" onclick="resumeAI()" style="display:none"><i class="fas fa-play"></i> Resume AI</button>
+      </div>
+      <div class="ask-row">
+        <input type="text" class="ask-input" id="askInput" placeholder="Ask a question to the candidate..." onkeydown="if(event.key==='Enter')sendQuestion()">
+        <button class="ask-btn" onclick="sendQuestion()"><i class="fas fa-paper-plane"></i> Ask</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Live scores + session info + recording -->
+  <div class="right-col">
+
+    <div class="r-sec">
+      <div class="r-title">Session Info</div>
+      <div class="r-row"><span>Candidate</span><span class="r-val" id="rCand" style="font-size:12px">–</span></div>
+      <div class="r-row"><span>Role</span><span class="r-val" id="rRole" style="font-size:12px">–</span></div>
+      <div class="r-row"><span>Status</span><span class="r-val" id="rStatus">–</span></div>
+      <div class="r-row"><span>AI Mode</span><span class="r-val" id="rAI" style="color:var(--success)">Active</span></div>
+      <div class="r-row"><span>Duration</span><span class="r-val" id="rDur">–</span></div>
+    </div>
+
+    <div class="r-sec">
+      <div class="r-title">Live Scores</div>
+      <div class="score-grid">
+        <div class="score-card" style="border-top-color:#4F46E5">
+          <div class="score-num" id="scConf" style="color:#818CF8">–</div>
+          <div class="score-lbl">Confidence</div>
+        </div>
+        <div class="score-card" style="border-top-color:#10B981">
+          <div class="score-num" id="scEng" style="color:#34D399">–</div>
+          <div class="score-lbl">Engagement</div>
+        </div>
+        <div class="score-card" style="border-top-color:#F59E0B">
+          <div class="score-num" id="scStr" style="color:#FCD34D">–</div>
+          <div class="score-lbl">Stress</div>
+        </div>
+        <div class="score-card" style="border-top-color:#EF4444">
+          <div class="score-num" id="scInteg" style="color:#FCA5A5">–</div>
+          <div class="score-lbl">Risk Score</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="r-sec">
+      <div class="r-title">Integrity Counters</div>
+      <div class="r-row">
+        <span><i class="fas fa-eye-slash" style="color:var(--warning);margin-right:5px"></i>Away from cam</span>
+        <span class="r-val" id="rLookAway" style="color:var(--warning)">0</span>
+      </div>
+      <div class="r-row">
+        <span><i class="fas fa-users" style="color:var(--danger);margin-right:5px"></i>Multiple faces</span>
+        <span class="r-val" id="rMultiFace" style="color:var(--danger)">0</span>
+      </div>
+      <div class="r-row">
+        <span><i class="fas fa-arrow-right-arrow-left" style="color:var(--warning);margin-right:5px"></i>Tab switches</span>
+        <span class="r-val" id="rTabSw" style="color:var(--warning)">0</span>
+      </div>
+      <div class="r-row">
+        <span><i class="fas fa-frame" style="color:var(--muted);margin-right:5px"></i>Frames analyzed</span>
+        <span class="r-val" id="rFrames" style="color:var(--muted)">0</span>
+      </div>
+    </div>
+
+    <div class="r-sec">
+      <div class="r-title">Chat Activity</div>
+      <div class="r-row"><span>Total messages</span><span class="r-val" id="rMsgs">0</span></div>
+      <div class="r-row"><span>AI questions</span><span class="r-val" id="rQ">0</span></div>
+      <div class="r-row"><span>Candidate replies</span><span class="r-val" id="rR">0</span></div>
+    </div>
+
+    <div class="r-sec">
+      <div class="r-title">Recording</div>
+      <div class="r-row"><span>Status</span><span id="recStatus" class="r-val" style="color:var(--muted)">Not started</span></div>
+      <div id="recActions" style="margin-top:8px"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API='/api/v1';
+const TOKEN=window.location.pathname.split('/').pop();
+let me=null,iv=null;
+let pollIv=null,metricsIv=null,timerIv=null;
+let lastMsgId=null,aiPaused=false,startedAt=null;
+let knownFlags=new Set();
+let prevMetrics={};
+
+/* ── Helpers ── */
+async function api(method,path,body=null){
+  const h={'Content-Type':'application/json'};
+  const t=localStorage.getItem('token');if(t)h['Authorization']='Bearer '+t;
+  const r=await fetch(API+path,{method,headers:h,credentials:'include',body:body?JSON.stringify(body):null});
+  if(r.status===401){location.href='/';return null;}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||'Error');
+  return d;
+}
+function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+
+/* ── Boot ── */
+(async()=>{
+  if(!localStorage.getItem('token')){location.href='/';return;}
+  try{
+    me=await api('GET','/users/me');
+    if(!me||!['admin','hr','interviewer'].includes(me.role)){alert('Access denied');location.href='/';return;}
+    iv=await api('GET',`/interview-session/join/${TOKEN}`);
+    if(!iv){alert('Interview not found');return;}
+    document.getElementById('ivName').textContent=iv.title;
+    document.getElementById('rCand').textContent=(iv.candidate?.full_name||'–')+' · '+(iv.candidate?.email||'');
+    document.getElementById('rRole').textContent=iv.job_role||'–';
+    document.getElementById('rDur').textContent=(iv.duration_minutes||'–')+' min';
+    setStatus(iv.status);
+    if(iv.ai_paused){aiPaused=true;updateAIUI();}
+    if(iv.status==='in_progress'){startedAt=iv.started_at?new Date(iv.started_at):new Date();startTimer();}
+    await loadAllMessages();
+    startPolling();
+  }catch(e){document.getElementById('ivName').textContent='Error: '+e.message;}
+})();
+
+/* ── Status ── */
+function setStatus(s){
+  const pill=document.getElementById('statusPill');
+  const dot=document.getElementById('statusDot');
+  const txt=document.getElementById('statusTxt');
+  document.getElementById('rStatus').textContent=s.replace('_',' ');
+  if(s==='in_progress'){
+    pill.className='pill pill-live';dot.className='dot dot-live';txt.textContent='LIVE';
+  }else{
+    pill.className='pill pill-wait';dot.className='dot dot-wait';txt.textContent=s.replace('_',' ').toUpperCase();
+  }
+}
+
+/* ── Timer ── */
+function startTimer(){
+  if(timerIv)return;
+  const base=startedAt||new Date();
+  timerIv=setInterval(()=>{
+    const s=Math.floor((Date.now()-base.getTime())/1000);
+    document.getElementById('timerEl').textContent=
+      String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  },1000);
+}
+
+/* ── Polling ── */
+function startPolling(){
+  // Messages + status every 2s
+  pollIv=setInterval(doPoll,2000);
+  // Vision metrics every 3s (slightly offset so they don't fire together)
+  setTimeout(()=>{metricsIv=setInterval(doMetrics,3000);doMetrics();},1000);
+}
+
+async function doPoll(){
+  try{
+    // New messages
+    const path='/interview-session/messages/'+TOKEN+(lastMsgId?'?since_id='+lastMsgId:'');
+    const msgs=await api('GET',path);
+    if(msgs&&msgs.length){
+      msgs.forEach(m=>appendMsg(m));
+      lastMsgId=msgs[msgs.length-1].id;
+    }
+    // Status
+    const st=await api('GET','/interview-session/status/'+TOKEN);
+    if(st){
+      setStatus(st.status);
+      if(st.status==='in_progress'&&!timerIv){startedAt=new Date();startTimer();}
+      if(st.ai_paused!==aiPaused){aiPaused=st.ai_paused;updateAIUI();}
+      if(st.status==='completed'){
+        clearInterval(pollIv);clearInterval(metricsIv);
+        loadRecordingInfo();
+        addFlag('Interview completed','success','fa-flag-checkered');
+      }
+    }
+  }catch(e){}
+}
+
+async function doMetrics(){
+  try{
+    const m=await api('GET','/interview-session/metrics/'+TOKEN);
+    if(!m)return;
+    updateMetricsUI(m);
+    detectNewFlags(m);
+  }catch(e){}
+}
+
+/* ── Metrics UI update ── */
+function pct(v){return v!=null?v.toFixed(1)+'%':'–';}
+function setMeter(id,val){
+  const el=document.getElementById(id);
+  if(el)el.style.width=(val||0)+'%';
+}
+function setVal(id,val,suffix=''){
+  const el=document.getElementById(id);
+  if(el)el.textContent=val!=null?val.toFixed(1)+suffix:'–';
+}
+
+function updateMetricsUI(m){
+  // Left panel meters
+  setMeter('mConf',m.confidence);setMeter('mEng',m.engagement);
+  setMeter('mStr',m.stress);setMeter('mCheat',m.cheating_score);
+  document.getElementById('vConf').textContent=pct(m.confidence);
+  document.getElementById('vEng').textContent=pct(m.engagement);
+  document.getElementById('vStr').textContent=pct(m.stress);
+  document.getElementById('vCheat').textContent=pct(m.cheating_score);
+  document.getElementById('vEmotion').textContent=m.dominant_emotion||'–';
+  document.getElementById('vFaces').textContent=m.face_count!=null?m.face_count:'–';
+  document.getElementById('vGaze').textContent=m.gaze_ok?'✓ OK':'⚠ Away';
+  document.getElementById('vGaze').style.color=m.gaze_ok?'var(--success)':'var(--danger)';
+  document.getElementById('frameCount').textContent=(m.frames_analyzed||0)+' frames';
+
+  // Right score cards
+  document.getElementById('scConf').textContent=m.confidence!=null?Math.round(m.confidence)+'%':'–';
+  document.getElementById('scEng').textContent=m.engagement!=null?Math.round(m.engagement)+'%':'–';
+  document.getElementById('scStr').textContent=m.stress!=null?Math.round(m.stress)+'%':'–';
+  const risk=m.cheating_score||0;
+  document.getElementById('scInteg').textContent=risk.toFixed(1)+'%';
+  document.getElementById('scInteg').style.color=risk>30?'var(--danger)':risk>15?'var(--warning)':'var(--success)';
+
+  // Counters
+  document.getElementById('rLookAway').textContent=m.look_away_count||0;
+  document.getElementById('rMultiFace').textContent=m.multi_face_count||0;
+  document.getElementById('rTabSw').textContent=m.tab_switches||0;
+  document.getElementById('rFrames').textContent=m.frames_analyzed||0;
+  prevMetrics=m;
+}
+
+/* ── Flag detection based on metric changes ── */
+function detectNewFlags(m){
+  const tabSw=m.tab_switches||0;
+  const prevTab=prevMetrics.tab_switches||0;
+  if(tabSw>prevTab){
+    for(let i=prevTab;i<tabSw;i++)
+      addFlag('Tab switch #'+(i+1)+' detected','danger','fa-arrow-right-arrow-left');
+  }
+  if((m.face_count||1)===0)
+    addFlag('Candidate not visible — no face detected','danger','fa-face-frown');
+  if((m.face_count||1)>1)
+    addFlag((m.face_count)+' faces detected in frame','danger','fa-users');
+  const risk=m.cheating_score||0;
+  if(risk>50&&(prevMetrics.cheating_score||0)<=50)
+    addFlag('High integrity risk: '+risk.toFixed(1)+'%','danger','fa-triangle-exclamation');
+  else if(risk>25&&(prevMetrics.cheating_score||0)<=25)
+    addFlag('Moderate integrity risk: '+risk.toFixed(1)+'%','warn','fa-exclamation-circle');
+  if(m.cheating_flags&&m.cheating_flags.length){
+    m.cheating_flags.forEach(f=>{
+      const key='cf:'+f;
+      if(!knownFlags.has(key)){knownFlags.add(key);addFlag('Vision flag: '+f,'warn','fa-eye-slash');}
+    });
+  }
+}
+
+/* ── Flags ── */
+function addFlag(text,type,icon){
+  const key=text+':'+now();
+  const el=document.getElementById('flagsList');
+  const empty=el.querySelector('.flags-empty');if(empty)empty.remove();
+  const d=document.createElement('div');d.className='flag-item f-'+type;
+  d.innerHTML=`<i class="fas ${icon}" style="flex-shrink:0;margin-top:1px"></i>
+    <div class="flag-txt">${esc(text)}<span class="flag-time">${now()}</span></div>`;
+  el.insertBefore(d,el.firstChild);  // newest on top
+  el.scrollTop=0;
+  document.getElementById('flagCount').textContent=el.querySelectorAll('.flag-item').length;
+}
+
+/* ── Messages ── */
+async function loadAllMessages(){
+  try{
+    const msgs=await api('GET','/interview-session/messages/'+TOKEN);
+    if(!msgs||!msgs.length)return;
+    const wait=document.getElementById('waitMsg');if(wait)wait.remove();
+    msgs.forEach(m=>appendMsg(m,false));
+    document.getElementById('chatMsgs').scrollTop=document.getElementById('chatMsgs').scrollHeight;
+    if(msgs.length)lastMsgId=msgs[msgs.length-1].id;
+    updateChatCounts();
+  }catch(e){}
+}
+
+function appendMsg(m,scroll=true){
+  const el=document.getElementById('chatMsgs');
+  if(document.querySelector(`[data-id="${m.id}"]`))return;
+  const wait=document.getElementById('waitMsg');if(wait)wait.remove();
+  const d=document.createElement('div');
+  d.className='msg '+m.role+' msg-new';d.dataset.id=m.id;
+  const labels={ai:'🤖 AI',candidate:'👤 Candidate',interviewer:'👨‍💼 Interviewer (You)'};
+  const isCQ=m.role==='ai'&&m.content&&m.content.startsWith('CODING_QUESTION:');
+  const content=isCQ?m.content.replace('CODING_QUESTION:','').trim():m.content;
+  const ts=m.timestamp?new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
+  d.innerHTML=`<span class="msg-lbl">${labels[m.role]||m.role} <span style="font-weight:400;opacity:.6">${ts}</span></span>
+    <div class="msg-bbl">${esc(content)}</div>
+    ${m.code_snippet?`<pre class="msg-code">${esc(m.code_snippet)}</pre>`:''}
+    ${isCQ?'<div style="font-size:10px;color:var(--warning);margin-top:3px"><i class="fas fa-code"></i> Coding question</div>':''}`;
+  el.appendChild(d);
+  if(scroll)el.scrollTop=el.scrollHeight;
+  updateChatCounts();
+  // Flag if candidate sent code
+  if(m.role==='candidate'&&m.code_snippet)
+    addFlag('Candidate submitted code solution','info','fa-code');
+}
+
+function updateChatCounts(){
+  const el=document.getElementById('chatMsgs');
+  const total=el.querySelectorAll('.msg').length;
+  const aiQ=el.querySelectorAll('.msg.ai').length;
+  const cR=el.querySelectorAll('.msg.candidate').length;
+  document.getElementById('msgBadge').textContent=total+' msgs';
+  document.getElementById('rMsgs').textContent=total;
+  document.getElementById('rQ').textContent=aiQ;
+  document.getElementById('rR').textContent=cR;
+}
+
+/* ── AI controls ── */
+function updateAIUI(){
+  document.getElementById('pauseBtn').style.display=aiPaused?'none':'flex';
+  document.getElementById('resumeBtn').style.display=aiPaused?'flex':'none';
+  document.getElementById('rAI').textContent=aiPaused?'Paused':'Active';
+  document.getElementById('rAI').style.color=aiPaused?'var(--warning)':'var(--success)';
+  if(aiPaused)addFlag('AI paused — interviewer control active','info','fa-pause-circle');
+  else addFlag('AI resumed','success','fa-play-circle');
+}
+
+async function pauseAI(){
+  try{await api('POST','/interview-session/pause-ai/'+TOKEN);aiPaused=true;updateAIUI();}
+  catch(e){alert(e.message);}
+}
+async function resumeAI(){
+  try{await api('POST','/interview-session/resume-ai/'+TOKEN);aiPaused=false;updateAIUI();}
+  catch(e){alert(e.message);}
+}
+async function sendQuestion(){
+  const q=document.getElementById('askInput').value.trim();
+  if(!q)return;
+  try{
+    const r=await api('POST','/interview-session/ask/'+TOKEN,{question:q});
+    if(r){appendMsg(r);document.getElementById('askInput').value='';}
+  }catch(e){alert(e.message);}
+}
+
+/* ── Recording ── */
+async function loadRecordingInfo(){
+  try{
+    const d=await api('GET','/interview-session/join/'+TOKEN);
+    const rs=document.getElementById('recStatus');
+    const ra=document.getElementById('recActions');
+    if(d&&d.has_recording){
+      rs.textContent='Available';rs.style.color='var(--success)';
+      ra.innerHTML=`<a href="${API}/recordings/download/${TOKEN}" target="_blank" class="btn btn-p" style="font-size:11px;padding:7px 14px"><i class="fas fa-play"></i> Watch Recording</a>`;
+    }else{
+      rs.textContent='Not available';
+    }
+  }catch(_){}
+}
+</script>
+</body>
+</html>

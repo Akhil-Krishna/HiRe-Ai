@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HirE.AI — Intelligent Interview Platform</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+:root{--primary:#4F46E5;--primary-dark:#3730A3;--secondary:#7C3AED;--success:#10B981;--danger:#EF4444;--warning:#F59E0B;--info:#3B82F6;--bg:#F1F5F9;--card:#FFFFFF;--text:#0F172A;--muted:#64748B;--border:#E2E8F0;--sidebar-bg:#1E1B4B;--sidebar-w:240px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+/* Sidebar */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:var(--sidebar-bg);color:#fff;display:flex;flex-direction:column;z-index:100;overflow:hidden}
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,#818CF8,#6D28D9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-text{font-size:20px;font-weight:800;letter-spacing:-.5px}
+.logo-sub{font-size:10px;color:rgba(255,255,255,.4);letter-spacing:1px;text-transform:uppercase}
+.sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
+.nav-section-label{padding:6px 12px 4px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.35)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.65);text-decoration:none;transition:.15s;cursor:pointer;border:none;background:none;width:100%;font-size:13.5px;font-weight:500}
+.nav-item:hover,.nav-item.active{color:#fff;background:rgba(255,255,255,.12)}
+.nav-item i{width:18px;text-align:center;font-size:14px}
+.nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px}
+.sidebar-footer{padding:12px;border-top:1px solid rgba(255,255,255,.1)}
+.user-card{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;background:rgba(255,255,255,.07)}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.user-info-text{flex:1;min-width:0}
+.user-name{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role-tag{font-size:10px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.5px}
+.logout-btn{background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;padding:4px;transition:.2s}
+.logout-btn:hover{color:#EF4444}
+/* Main layout */
+.main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.topbar-title{font-size:17px;font-weight:700}
+.topbar-breadcrumb{font-size:12px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.content{padding:28px;flex:1}
+/* Page system */
+.page{display:none}
+.page.active{display:block}
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.card-title{font-size:15px;font-weight:700}
+.card-subtitle{font-size:13px;color:var(--muted);margin-top:2px}
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;display:flex;align-items:center;gap:14px;transition:.2s}
+.stat-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.stat-val{font-size:26px;font-weight:800}
+.stat-lbl{font-size:12px;color:var(--muted);margin-top:1px}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:.2s;white-space:nowrap}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-outline{background:#fff;border:1.5px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:var(--bg);border-color:#CBD5E1}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-warning{background:var(--warning);color:#fff}
+.btn-ghost{background:transparent;color:var(--muted);padding:7px 12px}
+.btn-ghost:hover{background:var(--bg);color:var(--text)}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:7px}
+.btn-xs{padding:4px 9px;font-size:11px;border-radius:6px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11.5px;font-weight:600}
+.badge-scheduled{background:#EEF2FF;color:#4338CA}
+.badge-in_progress{background:#FEF3C7;color:#B45309}
+.badge-completed{background:#DCFCE7;color:#166534}
+.badge-cancelled{background:#FEE2E2;color:#991B1B}
+.badge-admin{background:#FCE7F3;color:#9D174D}
+.badge-hr{background:#E0E7FF;color:#3730A3}
+.badge-interviewer{background:#D1FAE5;color:#065F46}
+.badge-candidate{background:#FEF9C3;color:#854D0E}
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:11px 14px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#F8FAFC;border-bottom:2px solid var(--border)}
+td{padding:13px 14px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#FAFBFF}
+/* Forms */
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.form-label .optional{font-weight:400;color:var(--muted);margin-left:4px}
+input,select,textarea{width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13.5px;transition:border-color .2s;background:#fff;color:var(--text);font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+textarea{resize:vertical;min-height:80px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+/* Modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:28px;width:100%;max-width:580px;max-height:92vh;overflow-y:auto;animation:slideUp .2s ease}
+.modal-lg{max-width:720px}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.modal-title{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1;padding:2px 6px;border-radius:6px;transition:.2s}
+.modal-close:hover{background:var(--bg);color:var(--text)}
+/* Auth */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1E1B4B 0%,#312E81 40%,#4C1D95 100%)}
+.auth-card{background:#fff;border-radius:20px;padding:40px;width:100%;max-width:420px;box-shadow:0 25px 60px rgba(0,0,0,.25)}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo-icon{width:64px;height:64px;background:linear-gradient(135deg,#818CF8,#6D28D9);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 12px}
+.auth-title{font-size:24px;font-weight:800}
+.auth-sub{font-size:14px;color:var(--muted);margin-top:4px}
+/* Alerts */
+.alert{padding:12px 16px;border-radius:9px;font-size:13.5px;margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.alert-error{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA}
+.alert-success{background:#DCFCE7;color:#166534;border:1px solid #BBF7D0}
+.alert-info{background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE}
+.alert-warning{background:#FEF9C3;color:#854D0E;border:1px solid #FDE68A}
+/* Empty state */
+.empty{text-align:center;padding:50px 20px;color:var(--muted)}
+.empty i{font-size:44px;margin-bottom:14px;opacity:.35;display:block}
+.empty h3{font-size:16px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.empty p{font-size:13px}
+/* Score colors */
+.score-pass{color:var(--success);font-weight:700}
+.score-fail{color:var(--danger);font-weight:700}
+/* Divider */
+.divider{border:none;border-top:1px solid var(--border);margin:18px 0}
+/* Helpers */
+.flex{display:flex}.gap-2{gap:8px}.gap-3{gap:12px}.items-center{align-items:center}.justify-between{justify-content:space-between}.mt-2{margin-top:8px}.mt-4{margin-top:16px}.text-sm{font-size:13px}.text-xs{font-size:11px}.text-muted{color:var(--muted)}.font-bold{font-weight:700}.w-full{width:100%}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Score ring */
+.ring-wrap{display:flex;justify-content:center}
+.score-ring{position:relative;width:90px;height:90px}
+.ring-svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:6}
+.ring-fill{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s ease}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-val{font-size:20px;font-weight:800}
+.ring-lbl{font-size:9px;color:var(--muted);text-transform:uppercase}
+/* Checkbox list */
+.check-list{max-height:140px;overflow-y:auto;border:1.5px solid var(--border);border-radius:8px;padding:6px}
+.check-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;transition:.15s}
+.check-item:hover{background:var(--bg)}
+.check-item input[type=checkbox]{width:15px;height:15px;cursor:pointer}
+.check-item label{font-size:13px;cursor:pointer;flex:1}
+/* Tabs */
+.tab-bar{display:flex;gap:2px;background:var(--bg);padding:4px;border-radius:10px;margin-bottom:20px}
+.tab-btn{flex:1;padding:7px 12px;border:none;background:transparent;border-radius:7px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:.15s}
+.tab-btn.active{background:#fff;color:var(--primary);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+/* Interview card for candidate */
+.iv-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;transition:.2s}
+.iv-card:hover{border-color:#C7D2FE;box-shadow:0 2px 12px rgba(79,70,229,.08)}
+.iv-card-left{flex:1}
+.iv-card-title{font-size:15px;font-weight:700}
+.iv-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
+/* File upload */
+.file-drop{border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:.2s}
+.file-drop:hover{border-color:var(--primary);background:rgba(79,70,229,.03)}
+.file-drop i{font-size:28px;color:var(--muted);margin-bottom:8px;display:block}
+</style>
+</head>
+<body>
+
+<!-- AUTH PAGE -->
+<div id="authPage" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🤖</div>
+      <div class="auth-title">HirE.AI</div>
+      <div class="auth-sub">Intelligent Interview Platform</div>
+    </div>
+    <div id="authAlert"></div>
+
+    <!-- Login -->
+    <div id="loginForm">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="loginEmail" placeholder="you@company.com" onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="loginPwd" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <button class="btn btn-primary w-full" id="loginBtn" onclick="login()">
+        <i class="fas fa-sign-in-alt"></i> Sign In
+      </button>
+      <p class="text-sm text-muted" style="text-align:center;margin-top:14px">
+        No account? <a href="#" onclick="showForm('reg')" style="color:var(--primary)">Register</a>
+      </p>
+      <div style="margin-top:16px;padding:12px;background:#F8FAFC;border-radius:8px;font-size:11.5px;color:var(--muted)">
+        <strong>Demo accounts:</strong><br>
+        admin@demo.com / admin123 &nbsp;·&nbsp; hr@demo.com / hr123456<br>
+        interviewer@demo.com / int12345 &nbsp;·&nbsp; candidate@demo.com / can12345
+      </div>
+    </div>
+
+    <!-- Register -->
+    <div id="regForm" style="display:none">
+      <div class="form-group"><label class="form-label">Full Name</label><input type="text" id="regName" placeholder="John Smith"></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" id="regEmail" placeholder="you@company.com"></div>
+      <div class="form-group"><label class="form-label">Password</label><input type="password" id="regPwd" placeholder="Min 6 characters"></div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select id="regRole">
+          <option value="candidate">Candidate</option>
+          <option value="interviewer">Interviewer</option>
+          <option value="hr">HR Manager</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <button class="btn btn-primary w-full" onclick="register()"><i class="fas fa-user-plus"></i> Create Account</button>
+      <p class="text-sm text-muted" style="text-align:center;margin-top:14px">
+        Have an account? <a href="#" onclick="showForm('login')" style="color:var(--primary)">Sign In</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- APP LAYOUT -->
+<div id="appLayout" style="display:none">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🤖</div>
+      <div><div class="logo-text">HirE.AI</div><div class="logo-sub">Platform</div></div>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="avatar" id="sbAvatar"></div>
+        <div class="user-info-text">
+          <div class="user-name" id="sbName"></div>
+          <div class="user-role-tag" id="sbRole"></div>
+        </div>
+        <button class="logout-btn" onclick="logout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title" id="topTitle">Dashboard</div>
+      </div>
+      <div class="topbar-right" id="topActions"></div>
+    </div>
+    <div class="content">
+
+      <!-- Dashboard -->
+      <div id="pageDashboard" class="page active">
+        <div class="stats-row" id="statsRow"></div>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">Recent Interviews</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="showPage('Interviews')">View all →</button>
+          </div>
+          <div id="dashboardList"></div>
+        </div>
+      </div>
+
+      <!-- Interviews -->
+      <div id="pageInterviews" class="page">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">All Interviews</div>
+            <div id="interviewsPageActions"></div>
+          </div>
+          <div id="interviewsListWrap"></div>
+        </div>
+      </div>
+
+      <!-- Users (admin) -->
+      <div id="pageUsers" class="page">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">User Management</div>
+            <button class="btn btn-primary btn-sm" onclick="openAddUserModal()"><i class="fas fa-plus"></i> Add User</button>
+          </div>
+          <div id="usersListWrap"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODALS -->
+
+<!-- Schedule -->
+<div class="overlay" id="scheduleModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title"><span style="color:var(--primary)">📅</span> Schedule Interview</div>
+      <button class="modal-close" onclick="closeModal('scheduleModal')">×</button>
+    </div>
+    <div id="schedAlert"></div>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="st1" onclick="switchSchedTab(1)">Basic Info</button>
+      <button class="tab-btn" id="st2" onclick="switchSchedTab(2)">Question Bank</button>
+      <button class="tab-btn" id="st3" onclick="switchSchedTab(3)">Resume &amp; Team</button>
+    </div>
+
+    <!-- Tab 1: Basic -->
+    <div id="schedTab1">
+      <div class="form-group"><label class="form-label">Interview Title</label><input type="text" id="sTitle" placeholder="e.g. Senior Backend Engineer Interview"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Job Role</label><input type="text" id="sRole" placeholder="e.g. Backend Engineer"></div>
+        <div class="form-group"><label class="form-label">Candidate Email</label><input type="email" id="sEmail" placeholder="candidate@email.com"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Scheduled Date &amp; Time</label><input type="datetime-local" id="sDate"></div>
+        <div class="form-group"><label class="form-label">Duration (minutes)</label><input type="number" id="sDur" value="60" min="15" max="180"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description <span class="optional">(optional)</span></label><textarea id="sDesc" rows="2" placeholder="Interview notes or instructions for the candidate"></textarea></div>
+    </div>
+
+    <!-- Tab 2: Questions -->
+    <div id="schedTab2" style="display:none">
+      <div class="alert alert-info"><i class="fas fa-info-circle"></i> AI will use these questions in order. Leave empty to let AI generate based on the job role.</div>
+      <div class="form-group">
+        <label class="form-label">Upload Question Bank <span class="optional">(PDF or TXT — one question per line)</span></label>
+        <div class="file-drop" id="qbDrop" onclick="document.getElementById('qbFile').click()" style="cursor:pointer">
+          <i class="fas fa-file-pdf" style="font-size:28px;color:#EF4444;display:block;margin-bottom:8px"></i>
+          <div id="qbDropLabel" style="font-size:13px">Click to upload PDF or TXT question bank</div>
+          <div class="form-hint mt-2">Each line in the file becomes a question. Prefix with CODING: for coding questions.</div>
+        </div>
+        <input type="file" id="qbFile" style="display:none" accept=".pdf,.txt" onchange="handleQBFile(this)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Or type questions manually <span class="optional">(one per line)</span></label>
+        <textarea id="sQuestions" rows="7" placeholder="What is the time complexity of merge sort?
+Explain SOLID principles with examples.
+CODING: Write a binary search implementation.
+CODING: Implement a linked list in Python."></textarea>
+        <div class="form-hint">Prefix with CODING: to trigger the code editor automatically</div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Resume + Team -->
+    <div id="schedTab3" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Candidate Resume <span class="optional">(PDF, DOC, TXT)</span></label>
+        <div class="file-drop" id="resumeDrop" onclick="document.getElementById('resumeFile').click()">
+          <i class="fas fa-file-upload"></i>
+          <div id="resumeDropLabel">Drop resume here or click to browse</div>
+          <div class="form-hint mt-2">AI will use resume content to ask relevant questions</div>
+        </div>
+        <input type="file" id="resumeFile" style="display:none" accept=".pdf,.doc,.docx,.txt" onchange="handleResumeSelect(this)">
+      </div>
+      <hr class="divider">
+      <div class="form-group">
+        <label class="form-label">Assign Interviewers <span class="optional">(from your organisation)</span></label>
+        <div class="check-list" id="interviewerCheckList"><p class="text-muted text-sm" style="padding:8px">Loading...</p></div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="flex justify-between">
+      <button class="btn btn-ghost" onclick="closeModal('scheduleModal')">Cancel</button>
+      <button class="btn btn-primary" id="schedSubmit" onclick="scheduleInterview()">
+        <i class="fas fa-paper-plane"></i> Schedule &amp; Send Invite
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Add User -->
+<div class="overlay" id="addUserModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add New User</div>
+      <button class="modal-close" onclick="closeModal('addUserModal')">×</button>
+    </div>
+    <div id="addUserAlert"></div>
+    <div class="form-group"><label class="form-label">Full Name</label><input type="text" id="cuName"></div>
+    <div class="form-group"><label class="form-label">Email</label><input type="email" id="cuEmail"></div>
+    <div class="form-group"><label class="form-label">Password</label><input type="password" id="cuPwd"></div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <select id="cuRole">
+        <option value="candidate">Candidate</option>
+        <option value="interviewer">Interviewer</option>
+        <option value="hr">HR Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="flex justify-between mt-4">
+      <button class="btn btn-ghost" onclick="closeModal('addUserModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createUser()"><i class="fas fa-plus"></i> Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="overlay" id="detailModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="detailTitle">Interview Details</div>
+      <button class="modal-close" onclick="closeModal('detailModal')">×</button>
+    </div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<div id="toastWrap" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
+
+<script>
+const API='/api/v1';
+let currentUser=null, interviews=[], selectedResumeFile=null, schedTabN=1;
+
+/* ── Utils ── */
+async function api(method,path,body=null){
+  const opts={method,headers:{'Content-Type':'application/json'},credentials:'include'};
+  const t=localStorage.getItem('token');
+  if(t)opts.headers['Authorization']=`Bearer ${t}`;
+  if(body)opts.body=JSON.stringify(body);
+  let res;
+  try{res=await fetch(API+path,opts);}catch(e){throw new Error('Network error');}
+  if(res.status===401){if(!path.startsWith('/auth/')){localStorage.removeItem('token');if(document.getElementById('appLayout')&&document.getElementById('appLayout').style.display!=='none')location.reload();}throw new Error(data.detail||'Invalid credentials');}
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.detail||`Error ${res.status}`);
+  return data;
+}
+
+function toast(msg,type='success'){
+  const el=document.createElement('div');
+  const c=type==='success'?'#10B981':type==='error'?'#EF4444':'#3B82F6';
+  el.style.cssText=`background:${c};color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.2);max-width:320px;animation:slideUp .2s`;
+  el.textContent=msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(()=>el.remove(),3500);
+}
+
+function alert_el(id,msg,type='error'){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const icons={error:'circle-xmark',success:'check-circle',info:'info-circle',warning:'exclamation-triangle'};
+  el.innerHTML=`<div class="alert alert-${type}"><i class="fas fa-${icons[type]||'info-circle'}"></i>${msg}</div>`;
+  setTimeout(()=>{if(el)el.innerHTML='';},5000);
+}
+
+function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function fmt(d){if(!d)return'–';return new Date(d).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+
+/* ── Auth ── */
+function showForm(f){
+  document.getElementById('loginForm').style.display=f==='login'?'block':'none';
+  document.getElementById('regForm').style.display=f==='reg'?'block':'none';
+}
+
+async function login(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const pwd=document.getElementById('loginPwd').value;
+  if(!email){alert_el('authAlert','Please enter your email');return;}
+  if(!pwd){alert_el('authAlert','Please enter your password');return;}
+  const btn=document.getElementById('loginBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Signing in...';
+  try{
+    const d=await api('POST','/auth/login',{email,password:pwd});
+    localStorage.setItem('token',d.access_token);
+    currentUser=d.user;
+    initApp();
+  }catch(e){
+    alert_el('authAlert',e.message||'Login failed. Check your credentials.');
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-sign-in-alt"></i> Sign In';
+  }
+}
+
+async function register(){
+  const name=document.getElementById('regName').value.trim();
+  const email=document.getElementById('regEmail').value.trim();
+  const pwd=document.getElementById('regPwd').value;
+  const role=document.getElementById('regRole').value;
+  if(!name){alert_el('authAlert','Please enter your full name');return;}
+  if(!email){alert_el('authAlert','Please enter your email');return;}
+  if(!pwd||pwd.length<6){alert_el('authAlert','Password must be at least 6 characters');return;}
+  try{
+    await api('POST','/auth/register',{full_name:name,email,password:pwd,role});
+    alert_el('authAlert','✓ Account created! Signing you in...','success');
+    // Auto-login so user doesn't have to type again
+    setTimeout(async()=>{
+      try{
+        const d=await api('POST','/auth/login',{email,password:pwd});
+        localStorage.setItem('token',d.access_token);
+        currentUser=d.user;
+        initApp();
+      }catch(_){showForm('login');}
+    },700);
+  }catch(e){alert_el('authAlert',e.message||'Registration failed');}
+}
+
+async function logout(){
+  await api('POST','/auth/logout').catch(()=>{});
+  localStorage.removeItem('token');location.reload();
+}
+
+/* ── Init ── */
+async function initApp(){
+  if(!currentUser){try{currentUser=await api('GET','/users/me');}catch(e){localStorage.removeItem('token');return;}}
+  document.getElementById('authPage').style.display='none';
+  document.getElementById('appLayout').style.display='block';
+  buildSidebar();
+  showPage('Dashboard');
+}
+
+function buildSidebar(){
+  const role=currentUser.role;
+  document.getElementById('sbAvatar').textContent=currentUser.full_name[0].toUpperCase();
+  document.getElementById('sbName').textContent=currentUser.full_name;
+  document.getElementById('sbRole').textContent=role.toUpperCase();
+
+  const pages=[
+    {icon:'fa-gauge',label:'Dashboard',page:'Dashboard',roles:null},
+    {icon:'fa-calendar-check',label:'Interviews',page:'Interviews',roles:null},
+    {icon:'fa-users',label:'Users',page:'Users',roles:['admin']},
+  ];
+  document.getElementById('sidebarNav').innerHTML=pages
+    .filter(p=>!p.roles||p.roles.includes(role))
+    .map(p=>`<button class="nav-item" data-page="${p.page}" onclick="showPage('${p.page}')">
+      <i class="fas ${p.icon}"></i>${p.label}</button>`).join('');
+}
+
+function showPage(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const el=document.getElementById('page'+page);
+  if(el)el.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===page));
+  document.getElementById('topTitle').textContent=page;
+  const actions=document.getElementById('topActions');
+
+  if(page==='Dashboard'){actions.innerHTML='';loadDashboard();}
+  else if(page==='Interviews'){
+    if(['hr','admin'].includes(currentUser.role)){
+      actions.innerHTML=`<button class="btn btn-primary btn-sm" onclick="openScheduleModal()"><i class="fas fa-plus"></i> Schedule Interview</button>`;
+    }else{actions.innerHTML='';}
+    loadInterviewsPage();
+  }
+  else if(page==='Users'){actions.innerHTML='';loadUsersPage();}
+}
+
+/* ── Dashboard ── */
+async function loadDashboard(){
+  try{
+    interviews=await api('GET','/interviews');
+    const total=interviews.length;
+    const scheduled=interviews.filter(i=>i.status==='scheduled').length;
+    const completed=interviews.filter(i=>i.status==='completed').length;
+    const passed=interviews.filter(i=>i.passed===true).length;
+    const role=currentUser.role;
+
+    const stats=role==='candidate'?[
+      {icon:'fa-calendar',bg:'#EEF2FF',ic:'#4F46E5',val:total,lbl:'My Interviews'},
+      {icon:'fa-clock',bg:'#FEF3C7',ic:'#D97706',val:scheduled,lbl:'Upcoming'},
+      {icon:'fa-check-circle',bg:'#DCFCE7',ic:'#16A34A',val:completed,lbl:'Completed'},
+      {icon:'fa-trophy',bg:'#FEF9C3',ic:'#CA8A04',val:passed,lbl:'Passed'},
+    ]:[
+      {icon:'fa-calendar-alt',bg:'#EEF2FF',ic:'#4F46E5',val:total,lbl:'Total'},
+      {icon:'fa-clock',bg:'#FEF3C7',ic:'#D97706',val:scheduled,lbl:'Scheduled'},
+      {icon:'fa-check-circle',bg:'#DCFCE7',ic:'#16A34A',val:completed,lbl:'Completed'},
+      {icon:'fa-trophy',bg:'#FEF9C3',ic:'#CA8A04',val:passed,lbl:'Passed'},
+    ];
+
+    document.getElementById('statsRow').innerHTML=stats.map(s=>`
+      <div class="stat-card">
+        <div class="stat-icon" style="background:${s.bg}"><i class="fas ${s.icon}" style="color:${s.ic}"></i></div>
+        <div><div class="stat-val">${s.val}</div><div class="stat-lbl">${s.lbl}</div></div>
+      </div>`).join('');
+
+    renderInterviewList(interviews.slice(0,6),'dashboardList');
+  }catch(e){console.error(e);}
+}
+
+function renderInterviewList(list,containerId){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  if(!list||!list.length){
+    el.innerHTML=`<div class="empty"><i class="fas fa-calendar"></i><h3>No interviews yet</h3><p>Schedule one to get started</p></div>`;
+    return;
+  }
+  const isC=currentUser.role==='candidate';
+  el.innerHTML=`<div class="table-wrap"><table><thead><tr>
+    <th>Title &amp; Role</th>
+    <th>${isC?'Scheduled':'Candidate'}</th>
+    <th>${isC?'Duration':'Date'}</th>
+    <th>Status</th><th>Score</th><th>Actions</th>
+  </tr></thead><tbody>
+  ${list.map(i=>`<tr>
+    <td><div style="font-weight:600">${esc(i.title)}</div><div class="text-xs text-muted">${esc(i.job_role)}</div></td>
+    <td>${isC?fmt(i.scheduled_at):`<div style="font-weight:500">${esc(i.candidate?.full_name||'–')}</div><div class="text-xs text-muted">${esc(i.candidate?.email||'')}</div>`}</td>
+    <td>${isC?(i.duration_minutes+'m'):fmt(i.scheduled_at)}</td>
+    <td><span class="badge badge-${i.status}">${i.status.replace('_',' ')}</span></td>
+    <td>${i.overall_score!=null?`<span class="${i.overall_score>=60?'score-pass':'score-fail'}">${i.overall_score.toFixed(1)}%</span>`:'–'}</td>
+    <td>${actionBtns(i)}</td>
+  </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function actionBtns(iv){
+  const role=currentUser.role;
+  const btns=[];
+  if(role==='candidate'&&['scheduled','in_progress'].includes(iv.status)){
+    btns.push(`<a href="/interview/${iv.access_token}" target="_blank" class="btn btn-primary btn-xs"><i class="fas fa-play"></i> Join</a>`);
+  }
+  if(['hr','admin','interviewer'].includes(role)){
+    btns.push(`<button class="btn btn-ghost btn-xs" onclick="showDetail('${iv.id}')"><i class="fas fa-eye"></i> View</button>`);
+    if(['scheduled','in_progress'].includes(iv.status)){
+      btns.push(`<a href="/watch/${iv.access_token}" target="_blank" class="btn btn-outline btn-xs"><i class="fas fa-video"></i> Watch</a>`);
+    }
+  }
+  if(iv.status==='completed'){
+    btns.push(`<button class="btn btn-ghost btn-xs" onclick="showDetail('${iv.id}')"><i class="fas fa-chart-bar"></i> Report</button>`);
+  }
+  if(['hr','admin'].includes(role)&&iv.status!=='completed'&&iv.status!=='cancelled'){
+    btns.push(`<button class="btn btn-danger btn-xs" onclick="cancelIv('${iv.id}')"><i class="fas fa-ban"></i></button>`);
+  }
+  return `<div class="flex gap-2">${btns.join('')}</div>`;
+}
+
+/* ── Interviews Page ── */
+async function loadInterviewsPage(){
+  try{
+    interviews=await api('GET','/interviews');
+    const act=document.getElementById('interviewsPageActions');
+    if(['hr','admin'].includes(currentUser.role)){
+      act.innerHTML=`<button class="btn btn-primary btn-sm" onclick="openScheduleModal()"><i class="fas fa-plus"></i> Schedule Interview</button>`;
+    }
+    renderInterviewList(interviews,'interviewsListWrap');
+  }catch(e){console.error(e);}
+}
+
+async function cancelIv(id){
+  if(!confirm('Cancel this interview?'))return;
+  try{await api('DELETE',`/interviews/${id}`);toast('Interview cancelled');await loadDashboard();}
+  catch(e){toast(e.message,'error');}
+}
+
+/* ── Schedule Modal ── */
+function switchSchedTab(n){
+  schedTabN=n;
+  [1,2,3].forEach(i=>{
+    document.getElementById(`schedTab${i}`).style.display=i===n?'block':'none';
+    document.getElementById(`st${i}`).classList.toggle('active',i===n);
+  });
+}
+
+async function openScheduleModal(){
+  schedTabN=1;
+  switchSchedTab(1);
+  const dt=new Date(Date.now()+3600000);
+  document.getElementById('sDate').value=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('resumeDropLabel').textContent='Drop resume here or click to browse';
+  selectedResumeFile=null;
+
+  // Load interviewers from same org
+  document.getElementById('interviewerCheckList').innerHTML='<p class="text-sm text-muted" style="padding:6px">Loading...</p>';
+  try{
+    const ivs=await api('GET','/users/interviewers');
+    document.getElementById('interviewerCheckList').innerHTML=ivs.length
+      ?ivs.map(u=>`<div class="check-item"><input type="checkbox" id="iv_${u.id}" value="${u.id}">
+        <label for="iv_${u.id}"><strong>${esc(u.full_name)}</strong> <span class="text-xs text-muted">${esc(u.email)}</span></label></div>`).join('')
+      :'<p class="text-sm text-muted" style="padding:6px">No interviewers in your organisation</p>';
+  }catch(e){document.getElementById('interviewerCheckList').innerHTML='<p class="text-sm text-muted" style="padding:6px">Could not load</p>';}
+
+  openModal('scheduleModal');
+}
+
+function handleResumeSelect(input){
+  const f=input.files[0];
+  if(!f)return;
+  selectedResumeFile=f;
+  document.getElementById('resumeDropLabel').textContent=`✓ ${f.name} (${(f.size/1024).toFixed(0)} KB)`;
+}
+
+function parseQB(raw){
+  if(!raw||!raw.trim())return null;
+  try{
+    const p=JSON.parse(raw.trim());
+    if(Array.isArray(p))return p;
+  }catch(_){}
+  return raw.trim().split('\n').filter(l=>l.trim()).map(l=>{
+    const isCoding=l.trim().toUpperCase().startsWith('CODING:');
+    return{question:l.replace(/^CODING:\s*/i,'').trim(),difficulty:'medium',type:isCoding?'coding':'technical'};
+  });
+}
+
+async function scheduleInterview(){
+  const title=document.getElementById('sTitle').value.trim();
+  const role=document.getElementById('sRole').value.trim();
+  const email=document.getElementById('sEmail').value.trim();
+  const date=document.getElementById('sDate').value;
+  if(!title||!role||!email||!date){alert_el('schedAlert','Please fill in Title, Role, Email and Date');return;}
+
+  const btn=document.getElementById('schedSubmit');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Scheduling...';
+
+  const interviewer_ids=[...document.querySelectorAll('#interviewerCheckList input:checked')].map(c=>c.value);
+  const qb=parseQB(document.getElementById('sQuestions').value);
+
+  let interviewId=null;
+  try{
+    const iv=await api('POST','/interviews',{
+      title,job_role:role,candidate_email:email,
+      scheduled_at:date,duration_minutes:parseInt(document.getElementById('sDur').value)||60,
+      description:document.getElementById('sDesc').value||null,
+      interviewer_ids,question_bank:qb,
+      enable_emotion_analysis:true,enable_cheating_detection:true,
+    });
+    interviewId=iv.id;
+
+    // Upload resume if selected
+    if(selectedResumeFile&&interviewId){
+      try{
+        const fd=new FormData();
+        fd.append('file',selectedResumeFile);
+        const t=localStorage.getItem('token');
+        await fetch(`${API}/interviews/${interviewId}/resume`,{
+          method:'POST',headers:{Authorization:`Bearer ${t}`},
+          credentials:'include',body:fd,
+        });
+      }catch(e){console.warn('Resume upload failed:',e);}
+    }
+
+    closeModal('scheduleModal');
+    ['sTitle','sRole','sEmail','sDesc','sQuestions'].forEach(id=>document.getElementById(id).value='');
+    // Show temp password if a new candidate account was created
+    if(iv.temp_password){
+      showTempPasswordAlert(email, iv.temp_password, iv.access_token);
+    } else {
+      toast(`Interview scheduled! Invite sent to ${email}`);
+    }
+    await loadDashboard();
+  }catch(e){
+    alert_el('schedAlert',e.message);
+  }finally{
+    btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Schedule &amp; Send Invite';
+  }
+}
+
+/* ── Detail / Report ── */
+async function showDetail(id){
+  const iv=interviews.find(i=>i.id===id)||await api('GET',`/interviews/${id}`);
+  document.getElementById('detailTitle').textContent=iv.title;
+
+  let scoreHtml='';
+  if(iv.status==='completed'&&iv.overall_score!=null){
+    const pass=iv.overall_score>=60;
+    const oc=iv.overall_score;
+    scoreHtml=`
+      <div style="text-align:center;margin:16px 0">
+        <div style="font-size:40px;font-weight:900;color:${pass?'var(--success)':'var(--danger)'}">
+          ${oc.toFixed(1)}%
+        </div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px">${pass?'✅ PASSED':'❌ DID NOT PASS'}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        ${[
+          ['Q&A',iv.answer_score,'#4F46E5'],
+          ['Code',iv.code_score,'#10B981'],
+          ['Confidence',iv.emotion_score,'#F59E0B'],
+          ['Integrity',iv.integrity_score,'#EF4444'],
+        ].filter(([,v])=>v!=null).map(([l,v,c])=>`
+          <div style="background:#F8FAFC;border-radius:9px;padding:12px;text-align:center;border-top:3px solid ${c}">
+            <div style="font-size:20px;font-weight:800;color:${c}">${v.toFixed(1)}%</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase">${l}</div>
+          </div>`).join('')}
+      </div>
+      ${iv.ai_feedback?`<div style="background:#F8FAFC;border-radius:9px;padding:14px;font-size:13px;line-height:1.7;margin-bottom:10px">
+        <strong>AI Feedback:</strong><br>${esc(iv.ai_feedback)}</div>`:''}
+      ${iv.has_recording?`<a href="/api/v1/recordings/download/${iv.access_token}" target="_blank" class="btn btn-outline btn-sm">
+        <i class="fas fa-video"></i> View Recording</a>`:''}`;
+  }
+
+  document.getElementById('detailContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13.5px;margin-bottom:16px">
+      <span class="text-muted">Candidate</span><strong>${esc(iv.candidate?.full_name||'–')} (${esc(iv.candidate?.email||'')})</strong>
+      <span class="text-muted">Scheduled</span><span>${fmt(iv.scheduled_at)}</span>
+      <span class="text-muted">Duration</span><span>${iv.duration_minutes} minutes</span>
+      <span class="text-muted">Status</span><span><span class="badge badge-${iv.status}">${iv.status.replace('_',' ')}</span></span>
+      <span class="text-muted">Interview Link</span>
+      <span><a href="/interview/${iv.access_token}" target="_blank" style="color:var(--primary)">/interview/${iv.access_token.slice(0,12)}…</a></span>
+      ${iv.resume_path?`<span class="text-muted">Resume</span><span style="color:var(--success)">✓ Uploaded</span>`:''}
+    </div>
+    <hr class="divider">${scoreHtml}`;
+  openModal('detailModal');
+}
+
+/* ── Users Page ── */
+async function loadUsersPage(){
+  try{
+    const users=await api('GET','/users');
+    document.getElementById('usersListWrap').innerHTML=`<div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Organisation</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${users.map(u=>`<tr>
+        <td><strong>${esc(u.full_name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td><span class="badge badge-${u.role}">${u.role}</span></td>
+        <td class="text-sm text-muted">${esc(u.organisation?.name||'–')}</td>
+        <td><span class="badge ${u.is_active?'badge-completed':'badge-cancelled'}">${u.is_active?'Active':'Disabled'}</span></td>
+        <td><button class="btn btn-ghost btn-xs" onclick="toggleUser('${u.id}',${u.is_active})">${u.is_active?'Disable':'Enable'}</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }catch(e){console.error(e);}
+}
+
+function openAddUserModal(){openModal('addUserModal');}
+
+async function createUser(){
+  const name=document.getElementById('cuName').value.trim();
+  const email=document.getElementById('cuEmail').value.trim();
+  const pwd=document.getElementById('cuPwd').value;
+  if(!name||!email||!pwd){alert_el('addUserAlert','All fields required');return;}
+  try{
+    await api('POST','/users',{full_name:name,email,password:pwd,role:document.getElementById('cuRole').value});
+    closeModal('addUserModal');
+    ['cuName','cuEmail','cuPwd'].forEach(id=>document.getElementById(id).value='');
+    toast('User created');loadUsersPage();
+  }catch(e){alert_el('addUserAlert',e.message);}
+}
+
+async function toggleUser(id,active){
+  try{await api('PATCH',`/users/${id}`,{is_active:!active});loadUsersPage();}
+  catch(e){toast(e.message,'error');}
+}
+
+/* ── Question Bank PDF/TXT uploader ── */
+async function handleQBFile(input){
+  const file=input.files[0];
+  if(!file)return;
+  const lbl=document.getElementById('qbDropLabel');
+  const ta=document.getElementById('sQuestions');
+  lbl.textContent='Reading '+file.name+'...';
+  try{
+    if(file.name.toLowerCase().endsWith('.txt')){
+      const text=await file.text();
+      ta.value=text.trim();
+      const lines=text.split('\n').filter(l=>l.trim().length>5).length;
+      lbl.innerHTML='<i class="fas fa-check" style="color:var(--success)"></i> '+file.name+' — '+lines+' questions loaded';
+    } else if(file.name.toLowerCase().endsWith('.pdf')){
+      // Dynamically load pdf.js from CDN
+      if(!window.pdfjsLib){
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          s.onload=()=>{
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc=
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            res();
+          };
+          s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      const buf=await file.arrayBuffer();
+      const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+      let allText='';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const tc=await page.getTextContent();
+        allText+=tc.items.map(it=>it.str).join(' ')+'\n';
+      }
+      // Split into lines, keep non-empty ones 10+ chars
+      const lines=allText.split(/[\n\r]+/).map(l=>l.trim()).filter(l=>l.length>=10);
+      ta.value=lines.join('\n');
+      lbl.innerHTML='<i class="fas fa-check" style="color:var(--success)"></i> '+file.name+' — '+lines.length+' questions extracted';
+    } else {
+      lbl.textContent='Unsupported file type. Use PDF or TXT.';
+    }
+  }catch(e){
+    lbl.textContent='Error reading file: '+e.message;
+    console.error(e);
+  }
+}
+
+/* ── Temp password modal for new candidates ── */
+function showTempPasswordAlert(email, pwd, token){
+  // Create a prominent modal showing the temp credentials
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML=`
+    <div style="background:#1E293B;border:1px solid #334155;border-radius:20px;padding:36px;max-width:480px;width:95%;text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">🎉</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:8px">Interview Scheduled!</div>
+      <div style="font-size:13px;color:#94A3B8;margin-bottom:20px">A new candidate account was created.</div>
+      <div style="background:#0F172A;border:1px solid #F59E0B;border-radius:12px;padding:20px;text-align:left;margin-bottom:20px">
+        <div style="font-size:11px;color:#F59E0B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;font-weight:700">⚠️ Share these login credentials with the candidate</div>
+        <div style="margin-bottom:8px"><span style="color:#94A3B8;font-size:12px">Email:</span><br><strong style="color:#F1F5F9;font-size:14px">${email}</strong></div>
+        <div style="margin-bottom:8px"><span style="color:#94A3B8;font-size:12px">Password:</span><br><strong style="color:#10B981;font-size:20px;letter-spacing:2px">${pwd}</strong></div>
+        <div style="margin-top:12px;font-size:11px;color:#64748B">The candidate must log in at this site and join from their dashboard.</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button onclick="navigator.clipboard.writeText('Email: ${email}\nPassword: ${pwd}');this.textContent='✓ Copied!'" 
+                style="background:#4F46E5;color:#fff;border:none;border-radius:9px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer">
+          📋 Copy Credentials
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove()"
+                style="background:transparent;color:#94A3B8;border:1.5px solid #334155;border-radius:9px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer">
+          Done
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+/* ── Boot ── */
+(async()=>{
+  const token=localStorage.getItem('token');
+  if(token){
+    try{currentUser=await api('GET','/users/me');initApp();}
+    catch(e){localStorage.removeItem('token');}
+  }
+})();
+</script>
+</body>
+</html>

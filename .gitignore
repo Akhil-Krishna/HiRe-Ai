@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# DB
+*.db
+*.db-shm
+*.db-wal
+
+# Media
+recordings/*.webm
+recordings/*.mp4
+recordings/*.mkv
+uploads/resumes/*.pdf
+uploads/resumes/*.docx
+
+# Env
+.env
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+backend/__pycache__/
+backend/.env/
+backend/venv/
+backend/.env
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/recordings/*.webm
+backend/recordings/*.mp4
+backend/recordings/*.mkv
+backend/uploads/resumes/*.pdf
+backend/uploads/resumes/*.docx
+backend/.venv/
+backend/uploads/resumes/*.pdf
+backend/uploads/resumes/*.docx
+
+backend/app/__pycache__/
+backend/app/api/__pycache__/
+backend/app/core/__pycache__/
+backend/app/models/__pycache__/
+backend/app/schemas/__pycache__/
+backend/app/utils/__pycache__/
+backend/app/services/__pycache__/
+backend/app/api/v1/__pycache__/
+backend/app/api/v1/endpoints/__pycache__/
+
+
+
