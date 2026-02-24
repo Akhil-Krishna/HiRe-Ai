@@ -15,7 +15,7 @@ AI-powered interview platform with real-time monitoring, speech recognition opti
 ```bash
 # 1. Clone / unzip the project
 cd hireai
-
+cd backend
 # 2. Create virtual environment
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
