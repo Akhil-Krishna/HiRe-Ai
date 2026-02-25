@@ -149,7 +149,7 @@ async def _dispatch_llm(system: str, messages: List[dict]) -> Optional[str]:
 
 def _mock_interview_response(q_num: int, job_role: str) -> str:
     questions = [
-        f"Welcome! I'll be interviewing you for the {job_role} role today. Could you start by briefly introducing yourself and your most relevant experience?",
+        f"[MOCK INTERVIEW] Welcome! I'll be interviewing you for the {job_role} role today. Could you start by briefly introducing yourself and your most relevant experience?",
         "Great! Walk me through a technically challenging problem you solved recently — what was the challenge and how did you approach it?",
         "CODING_QUESTION: Let's do a coding exercise. Write a function that finds the two numbers in an array that add up to a target sum. Aim for O(n) complexity. Use the code editor.",
         "Good effort! Can you explain the difference between synchronous and asynchronous execution, with a real-world example of each?",
@@ -165,10 +165,10 @@ def _mock_interview_response(q_num: int, job_role: str) -> str:
 
 def _mock_evaluation() -> dict:
     return {
-        "answer_score": 76, "code_score": 80, "overall_score": 78, "passed": True,
-        "strengths": ["Clear communication", "Solid CS fundamentals", "Good problem-solving"],
-        "weaknesses": ["Could go deeper on system design", "Edge cases in code"],
-        "ai_feedback": "The candidate demonstrated strong fundamentals and communicated ideas clearly. Overall a solid performance — recommended for the next round.",
+        "answer_score": 5, "code_score": 0, "overall_score": 10, "passed": False,
+        "strengths": ["---"],
+        "weaknesses": ["---"],
+        "ai_feedback": "Unable to generate evaluation at this time.",
     }
 
 
@@ -252,8 +252,8 @@ async def generate_final_evaluation(
 
     emotion_score = None
     if emotion_data:
-        conf = emotion_data.get("avg_confidence", 65.0)
-        eng  = emotion_data.get("avg_engagement", 65.0)
+        conf = emotion_data.get("avg_confidence", 50.0)
+        eng  = emotion_data.get("avg_engagement", 50.0)
         emotion_score = round((float(conf) + float(eng)) / 2.0, 1)
     result["emotion_score"] = emotion_score
 
@@ -263,7 +263,8 @@ async def generate_final_evaluation(
     result["integrity_score"] = integrity_score
     result["cheating_score"]  = float(cheating_score) if cheating_score is not None else None
 
-    answer = float(result.get("answer_score", 70))
+    # modified 70->0
+    answer = float(result.get("answer_score", 0))
     code   = result.get("code_score")
 
     if code is not None and emotion_score is not None and integrity_score is not None:

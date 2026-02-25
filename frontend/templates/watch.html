@@ -325,7 +325,19 @@ function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2
     document.getElementById('rDur').textContent=(iv.duration_minutes||'–')+' min';
     setStatus(iv.status);
     if(iv.ai_paused){aiPaused=true;updateAIUI();}
-    if(iv.status==='in_progress'){startedAt=iv.started_at?new Date(iv.started_at):new Date();startTimer();}
+    if (iv.status === 'in_progress') {
+    // Parse started_at as UTC if it's a string without timezone
+    if (iv.started_at) {
+        // Ensure the string ends with 'Z' to force UTC interpretation
+        const dateStr = iv.started_at.includes('Z') || iv.started_at.includes('+') 
+            ? iv.started_at 
+            : iv.started_at + 'Z';
+        startedAt = new Date(dateStr);
+    } else {
+        startedAt = new Date(); // fallback to current time
+    }
+    startTimer();
+}
     await loadAllMessages();
     startPolling();
   }catch(e){document.getElementById('ivName').textContent='Error: '+e.message;}
