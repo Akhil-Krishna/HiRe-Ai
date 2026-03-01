@@ -1,15 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HiRe.AI — Live Monitor</title>
+<title>HiRe.AI - Live Monitor</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <style>
 :root{--primary:#4F46E5;--success:#10B981;--danger:#EF4444;--warning:#F59E0B;--bg:#0F172A;--panel:#1E293B;--border:#334155;--text:#F1F5F9;--muted:#94A3B8}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
-/* ── Topbar ── */
+/* -- Topbar -- */
 .topbar{background:#1A1A2E;border-bottom:1px solid var(--border);padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0;z-index:10}
 .logo{font-size:15px;font-weight:800;color:#818CF8}
 .sep{color:var(--border);font-size:18px}
@@ -23,10 +23,10 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 5px rgba(16,185,129,0)}}
 .tb-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .timer{font-size:15px;font-weight:800;color:var(--warning);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
-/* ── Main layout: 3 columns ── */
-.layout{display:grid;grid-template-columns:300px 1fr 340px;flex:1;overflow:hidden}
-/* ── LEFT: cam + flags ── */
-.left-col{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+/* -- Main layout: 3 columns -- */
+.layout{display:grid;grid-template-columns:320px 1fr 360px;flex:1;overflow:hidden}
+/* -- LEFT: cam + flags -- */
+.left-col{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
 .cam-box{position:relative;background:#000;flex-shrink:0}
 .cam-box video{width:100%;display:block;max-height:220px;object-fit:cover}
 .cam-placeholder{width:100%;height:180px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted);font-size:12px;background:#0A0F1E}
@@ -52,8 +52,11 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .flag-txt{flex:1;line-height:1.4}
 .flag-time{font-size:9px;color:var(--muted);margin-top:2px;display:block}
 .flags-empty{text-align:center;padding:20px;color:var(--muted);font-size:12px}
-/* ── MIDDLE: chat ── */
-.mid-col{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+/* -- MIDDLE: chat -- */
+.mid-col{display:flex;flex-direction:column;overflow:hidden;background:#0a1020}
+.video-stage{flex:1;overflow-y:auto;padding:10px;border-bottom:1px solid var(--border)}
+.video-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-content:start}
+.controls-bar{display:flex;gap:8px;padding:10px 12px;background:var(--panel);border-top:1px solid var(--border)}
 .chat-hdr{padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:8px;flex-shrink:0}
 .chat-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:78%;display:flex;flex-direction:column;gap:3px}
@@ -76,8 +79,8 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .ask-input:focus{border-color:var(--primary)}
 .ask-btn{padding:9px 16px;background:var(--primary);border:none;color:#fff;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600}
 .ask-btn:hover{background:#3730A3}
-/* ── RIGHT: scores ── */
-.right-col{background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+/* -- RIGHT: scores -- */
+.right-col{background:#162032;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 .r-sec{padding:12px 14px;border-bottom:1px solid var(--border)}
 .r-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px}
 .r-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:12.5px}
@@ -110,29 +113,14 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
   <div id="statusPill" class="pill pill-wait"><div class="dot dot-wait" id="statusDot"></div><span id="statusTxt">Connecting...</span></div>
   <div class="tb-right">
     <span class="timer" id="timerEl">00:00</span>
-    <a href="/" class="btn btn-o btn-sm" style="font-size:11px;padding:5px 12px">← Dashboard</a>
+    <a href="/" class="btn btn-o btn-sm" style="font-size:11px;padding:5px 12px">Back to Dashboard</a>
   </div>
 </div>
 
 <div class="layout">
 
-  <!-- LEFT: Candidate cam feed + vision metrics + flags -->
+  <!-- LEFT: Info + metrics + integrity -->
   <div class="left-col">
-    <div class="cam-box" id="camBox">
-      <div class="cam-placeholder" id="camPlaceholder">
-        <i class="fas fa-video-slash" style="font-size:28px;opacity:.3"></i>
-        <span>Candidate cam feed</span>
-        <span style="font-size:10px;opacity:.5">Appears when interview starts</span>
-      </div>
-      <video id="remoteVideo" autoplay playsinline style="display:none;width:100%;max-height:220px;object-fit:cover"></video>
-      <canvas id="camCanvas" style="display:none"></canvas>
-      <div class="cam-label" id="camLabel" style="display:none">
-        <div class="rec-dot"></div>
-        <span id="camLabelTxt">Live — Candidate Camera</span>
-      </div>
-    </div>
-
-    <!-- Vision Metrics (full, for HR/Interviewer) -->
     <div class="metrics-box">
       <div class="metrics-title">
         <span><i class="fas fa-chart-line" style="color:var(--primary)"></i> Vision Metrics</span>
@@ -143,47 +131,46 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
         <div><div class="metric-lbl">Confidence</div>
           <div class="meter"><div class="meter-fill" id="mConf" style="background:#4F46E5;width:0%"></div></div>
         </div>
-        <span class="metric-val" id="vConf" style="color:#818CF8">–</span>
+        <span class="metric-val" id="vConf" style="color:#818CF8">-</span>
       </div>
 
       <div class="metric-row">
         <div><div class="metric-lbl">Engagement</div>
           <div class="meter"><div class="meter-fill" id="mEng" style="background:#10B981;width:0%"></div></div>
         </div>
-        <span class="metric-val" id="vEng" style="color:#34D399">–</span>
+        <span class="metric-val" id="vEng" style="color:#34D399">-</span>
       </div>
 
       <div class="metric-row">
         <div><div class="metric-lbl">Stress</div>
           <div class="meter"><div class="meter-fill" id="mStr" style="background:#F59E0B;width:0%"></div></div>
         </div>
-        <span class="metric-val" id="vStr" style="color:#FCD34D">–</span>
+        <span class="metric-val" id="vStr" style="color:#FCD34D">-</span>
       </div>
 
       <div class="metric-row">
         <div><div class="metric-lbl">Integrity Risk</div>
           <div class="meter"><div class="meter-fill" id="mCheat" style="background:#EF4444;width:0%"></div></div>
         </div>
-        <span class="metric-val" id="vCheat" style="color:#FCA5A5">–</span>
+        <span class="metric-val" id="vCheat" style="color:#FCA5A5">-</span>
       </div>
 
       <div class="metric-row" style="margin-top:4px">
         <span class="metric-lbl">Dominant Emotion</span>
-        <span class="metric-val" id="vEmotion" style="color:#A5B4FC">–</span>
+        <span class="metric-val" id="vEmotion" style="color:#A5B4FC">-</span>
       </div>
 
       <div class="metric-row">
         <span class="metric-lbl">Faces in frame</span>
-        <span class="metric-val" id="vFaces">–</span>
+        <span class="metric-val" id="vFaces">-</span>
       </div>
 
       <div class="metric-row">
         <span class="metric-lbl">Gaze</span>
-        <span class="metric-val" id="vGaze" style="color:var(--success)">–</span>
+        <span class="metric-val" id="vGaze" style="color:var(--success)">-</span>
       </div>
     </div>
 
-    <!-- Flags -->
     <div class="flags-box">
       <div class="flags-title">
         <span><i class="fas fa-shield-halved"></i> Integrity Alerts</span>
@@ -191,63 +178,33 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
       </div>
       <div id="flagsList"><div class="flags-empty"><i class="fas fa-shield-check" style="display:block;font-size:20px;margin-bottom:8px;opacity:.4"></i>No alerts yet</div></div>
     </div>
-  </div>
-
-  <!-- MIDDLE: Chat transcript + controls -->
-  <div class="mid-col" style="overflow-y:auto;">
-    <div class="chat-hdr">
-      <i class="fas fa-comments" style="color:var(--primary)"></i>
-      <span style="font-size:13px;font-weight:600">Live Conversation</span>
-      <span id="msgBadge" class="badge" style="background:#1E293B;margin-left:auto">0 msgs</span>
-      <div class="dot dot-live" style="margin-left:8px" title="Auto-refreshing every 2s"></div>
-    </div>
-    <div class="chat-msgs" id="chatMsgs">
-      <div id="waitMsg" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
-        <i class="fas fa-clock" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>
-        Waiting for interview to start...
-      </div>
-    </div>
-    <div class="ask-bar">
-      <div class="ctrl-row">
-        <button class="ctrl-btn ctrl-pause" id="pauseBtn" onclick="pauseAI()"><i class="fas fa-pause"></i> Pause AI</button>
-        <button class="ctrl-btn ctrl-resume" id="resumeBtn" onclick="resumeAI()" style="display:none"><i class="fas fa-play"></i> Resume AI</button>
-      </div>
-      <div class="ask-row">
-        <input type="text" class="ask-input" id="askInput" placeholder="Ask a question to the candidate..." onkeydown="if(event.key==='Enter')sendQuestion()">
-        <button class="ask-btn" onclick="sendQuestion()"><i class="fas fa-paper-plane"></i> Ask</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- RIGHT: Live scores + session info + recording -->
-  <div class="right-col">
 
     <div class="r-sec">
       <div class="r-title">Session Info</div>
-      <div class="r-row"><span>Candidate</span><span class="r-val" id="rCand" style="font-size:12px">–</span></div>
-      <div class="r-row"><span>Role</span><span class="r-val" id="rRole" style="font-size:12px">–</span></div>
-      <div class="r-row"><span>Status</span><span class="r-val" id="rStatus">–</span></div>
+      <div class="r-row"><span>Candidate</span><span class="r-val" id="rCand" style="font-size:12px">-</span></div>
+      <div class="r-row"><span>Role</span><span class="r-val" id="rRole" style="font-size:12px">-</span></div>
+      <div class="r-row"><span>Status</span><span class="r-val" id="rStatus">-</span></div>
       <div class="r-row"><span>AI Mode</span><span class="r-val" id="rAI" style="color:var(--success)">Active</span></div>
-      <div class="r-row"><span>Duration</span><span class="r-val" id="rDur">–</span></div>
+      <div class="r-row"><span>Duration</span><span class="r-val" id="rDur">-</span></div>
     </div>
 
     <div class="r-sec">
       <div class="r-title">Live Scores</div>
       <div class="score-grid">
         <div class="score-card" style="border-top-color:#4F46E5">
-          <div class="score-num" id="scConf" style="color:#818CF8">–</div>
+          <div class="score-num" id="scConf" style="color:#818CF8">-</div>
           <div class="score-lbl">Confidence</div>
         </div>
         <div class="score-card" style="border-top-color:#10B981">
-          <div class="score-num" id="scEng" style="color:#34D399">–</div>
+          <div class="score-num" id="scEng" style="color:#34D399">-</div>
           <div class="score-lbl">Engagement</div>
         </div>
         <div class="score-card" style="border-top-color:#F59E0B">
-          <div class="score-num" id="scStr" style="color:#FCD34D">–</div>
+          <div class="score-num" id="scStr" style="color:#FCD34D">-</div>
           <div class="score-lbl">Stress</div>
         </div>
         <div class="score-card" style="border-top-color:#EF4444">
-          <div class="score-num" id="scInteg" style="color:#FCA5A5">–</div>
+          <div class="score-num" id="scInteg" style="color:#FCA5A5">-</div>
           <div class="score-lbl">Risk Score</div>
         </div>
       </div>
@@ -285,10 +242,58 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
       <div class="r-row"><span>Status</span><span id="recStatus" class="r-val" style="color:var(--muted)">Not started</span></div>
       <div id="recActions" style="margin-top:8px"></div>
     </div>
+  </div>
 
+  <!-- CENTER: Tiles only -->
+  <div class="mid-col">
+    <div class="video-stage">
+      <div id="videoGridWatch" class="video-grid">
+        <div class="tile" id="w-tile-local" style="position:relative;border:2px solid #334155;border-radius:10px;overflow:hidden;background:#020617;min-height:130px;">
+          <video id="wLocalVideo" autoplay muted playsinline style="width:100%;height:100%;object-fit:cover"></video>
+          <div style="position:absolute;left:8px;bottom:8px;background:rgba(2,6,23,.85);padding:2px 8px;border-radius:10px;font-size:11px;">You (Interviewer)</div>
+        </div>
+        <div class="tile" id="w-tile-ai" style="position:relative;border:2px solid #334155;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#1e1b4b,#111827);min-height:130px;display:flex;align-items:center;justify-content:center;">
+          <div style="text-align:center">
+            <div style="font-size:30px">AI</div>
+            <div id="wAiState" style="font-size:11px;color:#cbd5e1">AI Connected</div>
+          </div>
+        </div>
+        <div id="wRemoteTiles" style="display:contents"></div>
+      </div>
+    </div>
+    <div class="controls-bar">
+      <button class="btn btn-o" id="wMuteBtn" onclick="toggleRoomMute()"><i class="fas fa-microphone"></i> Mic</button>
+      <button class="btn btn-o" id="wCamBtn" onclick="toggleRoomCam()"><i class="fas fa-video"></i> Camera</button>
+      <button class="btn" style="background:#ef4444;color:#fff" onclick="leaveRoom()"><i class="fas fa-phone-slash"></i> End</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Chat + AI controls -->
+  <div class="right-col">
+    <div class="chat-hdr">
+      <i class="fas fa-comments" style="color:var(--primary)"></i>
+      <span style="font-size:13px;font-weight:600">Live Conversation</span>
+      <span id="msgBadge" class="badge" style="background:#1E293B;margin-left:auto">0 msgs</span>
+      <div class="dot dot-live" style="margin-left:8px" title="Auto-refreshing every 2s"></div>
+    </div>
+    <div class="chat-msgs" id="chatMsgs">
+      <div id="waitMsg" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
+        <i class="fas fa-clock" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>
+        Waiting for interview to start...
+      </div>
+    </div>
+    <div class="ask-bar">
+      <div class="ctrl-row">
+        <button class="ctrl-btn ctrl-pause" id="pauseBtn" onclick="pauseAI()"><i class="fas fa-pause"></i> Pause AI</button>
+        <button class="ctrl-btn ctrl-resume" id="resumeBtn" onclick="resumeAI()" style="display:none"><i class="fas fa-play"></i> Resume AI</button>
+      </div>
+      <div class="ask-row">
+        <input type="text" class="ask-input" id="askInput" placeholder="Ask a question to the candidate..." onkeydown="if(event.key==='Enter')sendQuestion()">
+        <button class="ask-btn" onclick="sendQuestion()"><i class="fas fa-paper-plane"></i> Ask</button>
+      </div>
+    </div>
   </div>
 </div>
-
 <script>
 const API='/api/v1';
 const TOKEN=window.location.pathname.split('/').pop();
@@ -297,8 +302,10 @@ let pollIv=null,metricsIv=null,timerIv=null;
 let lastMsgId=null,aiPaused=false,startedAt=null;
 let knownFlags=new Set();
 let prevMetrics={};
+let roomStream=null, roomMuted=false, roomCamOff=false;
+let rtcWs=null, rtcLocalParticipantId=null, rtcParticipants=[], rtcPeers=new Map(), rtcPendingIce=new Map(), localSpeechIv=null, localSpeaking=false;
 
-/* ── Helpers ── */
+/* -- Helpers -- */
 async function api(method,path,body=null){
   const h={'Content-Type':'application/json'};
   const t=localStorage.getItem('token');if(t)h['Authorization']='Bearer '+t;
@@ -311,7 +318,7 @@ async function api(method,path,body=null){
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
 function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 
-/* ── Boot ── */
+/* -- Boot -- */
 (async()=>{
   if(!localStorage.getItem('token')){location.href='/';return;}
   try{
@@ -320,9 +327,9 @@ function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2
     iv=await api('GET',`/interview-session/join/${TOKEN}`);
     if(!iv){alert('Interview not found');return;}
     document.getElementById('ivName').textContent=iv.title;
-    document.getElementById('rCand').textContent=(iv.candidate?.full_name||'–')+' · '+(iv.candidate?.email||'');
-    document.getElementById('rRole').textContent=iv.job_role||'–';
-    document.getElementById('rDur').textContent=(iv.duration_minutes||'–')+' min';
+    document.getElementById('rCand').textContent=(iv.candidate?.full_name||'-')+' - '+(iv.candidate?.email||'');
+    document.getElementById('rRole').textContent=iv.job_role||'-';
+    document.getElementById('rDur').textContent=(iv.duration_minutes||'-')+' min';
     setStatus(iv.status);
     if(iv.ai_paused){aiPaused=true;updateAIUI();}
     if (iv.status === 'in_progress') {
@@ -338,12 +345,14 @@ function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2
     }
     startTimer();
 }
+    await setupRoomMedia();
+    startRTC();
     await loadAllMessages();
     startPolling();
   }catch(e){document.getElementById('ivName').textContent='Error: '+e.message;}
 })();
 
-/* ── Status ── */
+/* -- Status -- */
 function setStatus(s){
   const pill=document.getElementById('statusPill');
   const dot=document.getElementById('statusDot');
@@ -356,7 +365,7 @@ function setStatus(s){
   }
 }
 
-/* ── Timer ── */
+/* -- Timer -- */
 function startTimer(){
   if(timerIv)return;
   const base=startedAt||new Date();
@@ -367,7 +376,7 @@ function startTimer(){
   },1000);
 }
 
-/* ── Polling ── */
+/* -- Polling -- */
 function startPolling(){
   // Messages + status every 2s
   pollIv=setInterval(doPoll,2000);
@@ -408,15 +417,15 @@ async function doMetrics(){
   }catch(e){}
 }
 
-/* ── Metrics UI update ── */
-function pct(v){return v!=null?v.toFixed(1)+'%':'–';}
+/* -- Metrics UI update -- */
+function pct(v){return v!=null?v.toFixed(1)+'%':'-';}
 function setMeter(id,val){
   const el=document.getElementById(id);
   if(el)el.style.width=(val||0)+'%';
 }
 function setVal(id,val,suffix=''){
   const el=document.getElementById(id);
-  if(el)el.textContent=val!=null?val.toFixed(1)+suffix:'–';
+  if(el)el.textContent=val!=null?val.toFixed(1)+suffix:'-';
 }
 
 function updateMetricsUI(m){
@@ -427,16 +436,16 @@ function updateMetricsUI(m){
   document.getElementById('vEng').textContent=pct(m.engagement);
   document.getElementById('vStr').textContent=pct(m.stress);
   document.getElementById('vCheat').textContent=pct(m.cheating_score);
-  document.getElementById('vEmotion').textContent=m.dominant_emotion||'–';
-  document.getElementById('vFaces').textContent=m.face_count!=null?m.face_count:'–';
-  document.getElementById('vGaze').textContent=m.gaze_ok?'✓ OK':'⚠ Away';
+  document.getElementById('vEmotion').textContent=m.dominant_emotion||'-';
+  document.getElementById('vFaces').textContent=m.face_count!=null?m.face_count:'-';
+  document.getElementById('vGaze').textContent=m.gaze_ok?'OK':'Away';
   document.getElementById('vGaze').style.color=m.gaze_ok?'var(--success)':'var(--danger)';
   document.getElementById('frameCount').textContent=(m.frames_analyzed||0)+' frames';
 
   // Right score cards
-  document.getElementById('scConf').textContent=m.confidence!=null?Math.round(m.confidence)+'%':'–';
-  document.getElementById('scEng').textContent=m.engagement!=null?Math.round(m.engagement)+'%':'–';
-  document.getElementById('scStr').textContent=m.stress!=null?Math.round(m.stress)+'%':'–';
+  document.getElementById('scConf').textContent=m.confidence!=null?Math.round(m.confidence)+'%':'-';
+  document.getElementById('scEng').textContent=m.engagement!=null?Math.round(m.engagement)+'%':'-';
+  document.getElementById('scStr').textContent=m.stress!=null?Math.round(m.stress)+'%':'-';
   const risk=m.cheating_score||0;
   document.getElementById('scInteg').textContent=risk.toFixed(1)+'%';
   document.getElementById('scInteg').style.color=risk>30?'var(--danger)':risk>15?'var(--warning)':'var(--success)';
@@ -449,7 +458,7 @@ function updateMetricsUI(m){
   prevMetrics=m;
 }
 
-/* ── Flag detection based on metric changes ── */
+/* -- Flag detection based on metric changes -- */
 function detectNewFlags(m){
   const tabSw=m.tab_switches||0;
   const prevTab=prevMetrics.tab_switches||0;
@@ -458,7 +467,7 @@ function detectNewFlags(m){
       addFlag('Tab switch #'+(i+1)+' detected','danger','fa-arrow-right-arrow-left');
   }
   if((m.face_count||1)===0)
-    addFlag('Candidate not visible — no face detected','danger','fa-face-frown');
+    addFlag('Candidate not visible - no face detected','danger','fa-face-frown');
   if((m.face_count||1)>1)
     addFlag((m.face_count)+' faces detected in frame','danger','fa-users');
   const risk=m.cheating_score||0;
@@ -474,7 +483,7 @@ function detectNewFlags(m){
   }
 }
 
-/* ── Flags ── */
+/* -- Flags -- */
 function addFlag(text,type,icon){
   const key=text+':'+now();
   const el=document.getElementById('flagsList');
@@ -487,7 +496,7 @@ function addFlag(text,type,icon){
   document.getElementById('flagCount').textContent=el.querySelectorAll('.flag-item').length;
 }
 
-/* ── Messages ── */
+/* -- Messages -- */
 async function loadAllMessages(){
   try{
     const msgs=await api('GET','/interview-session/messages/'+TOKEN);
@@ -506,7 +515,7 @@ function appendMsg(m,scroll=true){
   const wait=document.getElementById('waitMsg');if(wait)wait.remove();
   const d=document.createElement('div');
   d.className='msg '+m.role+' msg-new';d.dataset.id=m.id;
-  const labels={ai:'🤖 AI',candidate:'👤 Candidate',interviewer:'👨‍💼 Interviewer (You)'};
+  const labels={ai:'AI',candidate:'Candidate',interviewer:'Interviewer (You)'};
   const isCQ=m.role==='ai'&&m.content&&m.content.startsWith('CODING_QUESTION:');
   const content=isCQ?m.content.replace('CODING_QUESTION:','').trim():m.content;
   const ts=m.timestamp?new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
@@ -517,6 +526,11 @@ function appendMsg(m,scroll=true){
   el.appendChild(d);
   if(scroll)el.scrollTop=el.scrollHeight;
   updateChatCounts();
+  if(m.role==='ai'){
+    const s=document.getElementById('wAiState');if(s)s.textContent='AI Speaking';
+    const t=document.getElementById('w-tile-ai');if(t)t.style.borderColor='#22c55e';
+    setTimeout(()=>{const s2=document.getElementById('wAiState');if(s2)s2.textContent='AI Connected';const t2=document.getElementById('w-tile-ai');if(t2)t2.style.borderColor='#334155';},1400);
+  }
   // Flag if candidate sent code
   if(m.role==='candidate'&&m.code_snippet)
     addFlag('Candidate submitted code solution','info','fa-code');
@@ -533,13 +547,210 @@ function updateChatCounts(){
   document.getElementById('rR').textContent=cR;
 }
 
-/* ── AI controls ── */
+/* -- RTC meeting room -- */
+const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
+function rtcSend(msg){if(rtcWs&&rtcWs.readyState===1)rtcWs.send(JSON.stringify(msg));}
+
+async function setupRoomMedia(){
+  try{
+    roomStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+    document.getElementById('wLocalVideo').srcObject=roomStream;
+  }catch(e){
+    addFlag('Camera/mic unavailable for live speaking','warn','fa-video-slash');
+  }
+}
+
+function ensureRemoteTile(pid,label){
+  let tile=document.getElementById('w-tile-'+pid);
+  if(tile){
+    const lbl=tile.querySelector('.w-label');
+    if(lbl)lbl.textContent=label;
+    return tile.querySelector('video');
+  }
+  tile=document.createElement('div');
+  tile.id='w-tile-'+pid;
+  tile.className='tile';
+  tile.style.cssText='position:relative;border:2px solid #334155;border-radius:10px;overflow:hidden;background:#020617;min-height:130px;';
+  tile.innerHTML=`<video autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video>
+    <div class="w-label" style="position:absolute;left:8px;bottom:8px;background:rgba(2,6,23,.85);padding:2px 8px;border-radius:10px;font-size:11px;">${esc(label)}</div>
+    <div class="w-meta" style="position:absolute;right:8px;bottom:8px;background:rgba(2,6,23,.85);padding:2px 6px;border-radius:10px;font-size:10px;">Mic Cam</div>`;
+  document.getElementById('wRemoteTiles').appendChild(tile);
+  return tile.querySelector('video');
+}
+
+function setSpeaker(pid,speaking){
+  const tile=pid==='local'?document.getElementById('w-tile-local'):document.getElementById('w-tile-'+pid);
+  if(!tile)return;
+  tile.style.borderColor=speaking?'#22c55e':'#334155';
+  tile.style.boxShadow=speaking?'0 0 0 2px rgba(34,197,94,.35) inset':'none';
+}
+
+function removePeer(pid){
+  const pc=rtcPeers.get(pid);if(pc){try{pc.close();}catch(_){}}
+  rtcPeers.delete(pid);
+  rtcPendingIce.delete(pid);
+  const tile=document.getElementById('w-tile-'+pid);if(tile)tile.remove();
+}
+
+async function applyOrQueueIce(fromPid, candidate){
+  if(!candidate) return;
+  const pc=rtcPeers.get(fromPid);
+  if(!pc) return;
+  if(pc.remoteDescription && pc.remoteDescription.type){
+    await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(()=>{});
+    return;
+  }
+  const queue=rtcPendingIce.get(fromPid)||[];
+  queue.push(candidate);
+  rtcPendingIce.set(fromPid, queue);
+}
+
+async function flushPendingIce(fromPid){
+  const pc=rtcPeers.get(fromPid);
+  if(!pc) return;
+  const queue=rtcPendingIce.get(fromPid)||[];
+  for(const candidate of queue){
+    await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(()=>{});
+  }
+  rtcPendingIce.delete(fromPid);
+}
+
+function createPeer(targetPid,initiator){
+  if(rtcPeers.has(targetPid))return rtcPeers.get(targetPid);
+  const pc=new RTCPeerConnection(RTC_CONFIG);
+  if(roomStream)roomStream.getTracks().forEach(t=>pc.addTrack(t,roomStream));
+  pc.onicecandidate=e=>{if(e.candidate)rtcSend({type:'ice',to:targetPid,candidate:e.candidate});};
+  pc.ontrack=e=>{
+    const p=rtcParticipants.find(x=>x.participant_id===targetPid);
+    const v=ensureRemoteTile(targetPid,p?`${p.display_name} (${p.role})`:'Participant');
+    v.srcObject=e.streams[0];
+    v.play().catch(()=>{});
+  };
+  rtcPeers.set(targetPid,pc);
+  if(initiator){
+    pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>rtcSend({type:'offer',to:targetPid,sdp:pc.localDescription})).catch(()=>{});
+  }
+  return pc;
+}
+
+function syncParticipants(parts){
+  const map=new Map();
+  for(const p of (parts||[])){ if(p&&p.participant_id&&p.participant_id!==rtcLocalParticipantId)map.set(p.participant_id,p); }
+  rtcParticipants=Array.from(map.values());
+  const keep=new Set(rtcParticipants.map(p=>p.participant_id));
+  for(const pid of Array.from(rtcPeers.keys())) if(!keep.has(pid))removePeer(pid);
+  for(const p of rtcParticipants){
+    ensureRemoteTile(p.participant_id,`${p.display_name} (${p.role})`);
+    const tile=document.getElementById('w-tile-'+p.participant_id);
+    const meta=tile?tile.querySelector('.w-meta'):null;
+    if(meta)meta.textContent=`${p.mic_on===false?'Muted':'Mic'} ${p.cam_on===false?'CamOff':'Cam'}`;
+    setSpeaker(p.participant_id,!!p.speaking);
+  }
+}
+
+function startLocalSpeakingDetector(){
+  if(!roomStream||localSpeechIv)return;
+  try{
+    const ac=new (window.AudioContext||window.webkitAudioContext)();
+    const src=ac.createMediaStreamSource(new MediaStream(roomStream.getAudioTracks()));
+    const an=ac.createAnalyser();an.fftSize=512;src.connect(an);
+    const buf=new Uint8Array(an.frequencyBinCount);
+    localSpeechIv=setInterval(()=>{
+      an.getByteFrequencyData(buf);
+      let s=0;for(let i=0;i<buf.length;i++)s+=buf[i];
+      const speaking=(s/buf.length)>18;
+      if(speaking!==localSpeaking){
+        localSpeaking=speaking;
+        rtcSend({type:'speaking_state',speaking});
+        setSpeaker('local',speaking);
+      }
+    },260);
+  }catch(_){}
+}
+
+function startRTC(){
+  const wsProto=location.protocol==='https:'?'wss':'ws';
+  const jwtToken=localStorage.getItem('token')||'';
+  rtcWs=new WebSocket(`${wsProto}://${location.host}/api/v1/ws/rtc/${TOKEN}?role=watcher&token=${jwtToken}`);
+  rtcWs.onopen=()=>{
+    rtcSend({type:'media_state',mic_on:!roomMuted,cam_on:!roomCamOff});
+    startLocalSpeakingDetector();
+  };
+  rtcWs.onmessage=async e=>{
+    const msg=JSON.parse(e.data||'{}');
+    if(msg.type==='joined'){
+      rtcLocalParticipantId=msg.participant?.participant_id||null;
+    }else if(msg.type==='participants_snapshot'){
+      syncParticipants(msg.participants||[]);
+    }else if(msg.type==='participant_joined'){
+      syncParticipants([...(rtcParticipants||[]), msg.participant].filter(Boolean));
+    }else if(msg.type==='participant_left'){
+      removePeer(msg.participant_id);
+      syncParticipants((rtcParticipants||[]).filter(p=>p.participant_id!==msg.participant_id));
+    }else if(msg.type==='negotiate_with'){
+      const pid=msg.participant_id;
+      if(pid&&pid!==rtcLocalParticipantId)createPeer(pid,true);
+    }else if(msg.type==='offer'){
+      const pc=createPeer(msg.from,false);
+      await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      await flushPendingIce(msg.from);
+      const ans=await pc.createAnswer();await pc.setLocalDescription(ans);
+      rtcSend({type:'answer',to:msg.from,sdp:pc.localDescription});
+    }else if(msg.type==='answer'){
+      const pc=rtcPeers.get(msg.from);
+      if(pc){
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        await flushPendingIce(msg.from);
+      }
+    }else if(msg.type==='ice'){
+      await applyOrQueueIce(msg.from, msg.candidate);
+    }else if(msg.type==='speaking_state'){
+      setSpeaker(msg.participant_id,msg.speaking);
+    }else if(msg.type==='participant_media'){
+      const tile=document.getElementById('w-tile-'+msg.participant_id);
+      const meta=tile?tile.querySelector('.w-meta'):null;
+      if(meta)meta.textContent=`${msg.mic_on===false?'Muted':'Mic'} ${msg.cam_on===false?'CamOff':'Cam'}`;
+    }else if(msg.type==='ping'){
+      rtcSend({type:'pong'});
+    }else if(msg.type==='error'){
+      console.warn('RTC error:',msg.detail||msg);
+      addFlag('Realtime room error: '+(msg.detail||'unknown'),'warn','fa-triangle-exclamation');
+    }
+  };
+  rtcWs.onerror=()=>addFlag('Failed to connect realtime room','danger','fa-plug-circle-xmark');
+  rtcWs.onclose=()=>{
+    rtcParticipants=[];
+    for(const pid of Array.from(rtcPeers.keys()))removePeer(pid);
+  };
+}
+
+function toggleRoomMute(){
+  roomMuted=!roomMuted;
+  if(roomStream)roomStream.getAudioTracks().forEach(t=>t.enabled=!roomMuted);
+  document.getElementById('wMuteBtn').innerHTML='<i class="fas fa-microphone'+(roomMuted?'-slash':'')+'"></i> Mic';
+  rtcSend({type:'media_state',mic_on:!roomMuted,cam_on:!roomCamOff});
+}
+function toggleRoomCam(){
+  roomCamOff=!roomCamOff;
+  if(roomStream)roomStream.getVideoTracks().forEach(t=>t.enabled=!roomCamOff);
+  document.getElementById('wCamBtn').innerHTML='<i class="fas fa-video'+(roomCamOff?'-slash':'')+'"></i> Camera';
+  rtcSend({type:'media_state',mic_on:!roomMuted,cam_on:!roomCamOff});
+}
+function leaveRoom(){
+  if(localSpeechIv){clearInterval(localSpeechIv);localSpeechIv=null;}
+  if(roomStream)roomStream.getTracks().forEach(t=>t.stop());
+  for(const pid of Array.from(rtcPeers.keys()))removePeer(pid);
+  if(rtcWs&&rtcWs.readyState<2){try{rtcWs.close();}catch(_){}}
+  location.href='/';
+}
+
+/* -- AI controls -- */
 function updateAIUI(){
   document.getElementById('pauseBtn').style.display=aiPaused?'none':'flex';
   document.getElementById('resumeBtn').style.display=aiPaused?'flex':'none';
   document.getElementById('rAI').textContent=aiPaused?'Paused':'Active';
   document.getElementById('rAI').style.color=aiPaused?'var(--warning)':'var(--success)';
-  if(aiPaused)addFlag('AI paused — interviewer control active','info','fa-pause-circle');
+  if(aiPaused)addFlag('AI paused - interviewer control active','info','fa-pause-circle');
   else addFlag('AI resumed','success','fa-play-circle');
 }
 
@@ -560,7 +771,7 @@ async function sendQuestion(){
   }catch(e){alert(e.message);}
 }
 
-/* ── Recording ── */
+/* -- Recording -- */
 async function loadRecordingInfo(){
   try{
     const d=await api('GET','/interview-session/join/'+TOKEN);
@@ -574,6 +785,15 @@ async function loadRecordingInfo(){
     }
   }catch(_){}
 }
+
+window.addEventListener('beforeunload',()=>{
+  if(localSpeechIv){clearInterval(localSpeechIv);localSpeechIv=null;}
+  if(roomStream)roomStream.getTracks().forEach(t=>t.stop());
+  for(const pid of Array.from(rtcPeers.keys()))removePeer(pid);
+  if(rtcWs&&rtcWs.readyState<2){try{rtcWs.close();}catch(_){}}
+});
 </script>
 </body>
 </html>
+
+
