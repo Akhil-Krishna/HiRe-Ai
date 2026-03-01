@@ -10,4 +10,4 @@ api_router.include_router(interview_session.router)
 api_router.include_router(vision.router)
 api_router.include_router(recordings.router)
 api_router.include_router(stt.router)
-api_router.include_router(webrtc.router)  # WebSocket — no prefix, mounts at /ws/rtc/{token}
+api_router.include_router(webrtc.router)  # Mounted under /api/v1/ws/rtc/{token}

@@ -1,6 +1,7 @@
 import smtplib
 import ssl
 import logging
+import httpx
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -36,8 +37,34 @@ def send_email_sync(to: str, subject: str, html_body: str) -> bool:
             to, subject, html_body[:400],
         )
         return True
+    if provider == "sendgrid":
+        api_key = settings.SENDGRID_API_KEY.strip()
+        sender = (settings.SENDGRID_FROM_EMAIL or settings.EMAIL_FROM or settings.SMTP_USER).strip()
+        if not api_key or not sender:
+            logger.error("SendGrid misconfigured: SENDGRID_API_KEY or sender missing")
+            return False
+        try:
+            payload = {
+                "personalizations": [{"to": [{"email": to}], "subject": subject}],
+                "from": {"email": sender},
+                "content": [{"type": "text/html", "value": html_body}],
+            }
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+            if resp.status_code in (200, 202):
+                logger.info("SendGrid email sent -> %s | %s", to, subject)
+                return True
+            logger.error("SendGrid send failed status=%s body=%s", resp.status_code, resp.text[:500])
+            return False
+        except Exception as e:
+            logger.error("SendGrid error sending to %s: %s", to, e)
+            return False
 
-    # ── SMTP provider ─────────────────────────────────────────────────────
+    # SMTP provider ─────────────────────────────────────────────────────
     sender = _effective_sender()
 
     try:
@@ -228,3 +255,4 @@ async def send_interviewer_notification(
     return send_interviewer_notification_sync(
         interviewer_email, interviewer_name, interview_title, scheduled_at, dashboard_link
     )
+

@@ -1,13 +1,23 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.database import AsyncSessionLocal
 from app.api.v1 import api_router
+from app.models.interview import Interview
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 @asynccontextmanager
@@ -99,12 +109,20 @@ async def serve_index():
 
 @app.get("/interview/{access_token}", response_class=HTMLResponse, include_in_schema=False)
 async def serve_interview(access_token: str):
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(Interview.id).where(Interview.access_token == access_token))
+        if not res.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Interview not found")
     return (templates_path / "interview.html").read_text(encoding="utf-8")
 
 
 @app.get("/watch/{access_token}", response_class=HTMLResponse, include_in_schema=False)
 async def serve_watch(access_token: str):
     """Interviewer live view page."""
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(Interview.id).where(Interview.access_token == access_token))
+        if not res.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Interview not found")
     return (templates_path / "watch.html").read_text(encoding="utf-8")
 
 

@@ -1,314 +1,111 @@
-
-import json
 import asyncio
+import json
 import logging
-from collections import defaultdict
-from typing import Optional
+from typing import Optional, Tuple
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.security import decode_token
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.core.security import decode_token
 from app.models.interview import Interview, InterviewInterviewer
+from app.models.user import User, UserRole
+from app.services.room_manager import RoomManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webrtc"])
 
+room_manager = RoomManager(
+    capacity=settings.RTC_ROOM_CAPACITY,
+    join_rate_limit=settings.RTC_JOIN_RATE_LIMIT,
+    join_window_seconds=settings.RTC_JOIN_WINDOW_SECONDS,
+)
 
-# ── Authorization helper ──────────────────────────────────────────────────────
 
-async def _authorize(interview_token: str, jwt_payload: dict, role: str) -> Optional[str]:
-    """
-    Returns None if authorized.
-    Returns a rejection reason string if denied.
-    Opens and closes its own DB session (WS connections stay open long-term).
-    """
-    user_id: str = jwt_payload.get("sub")
-    if not user_id:
-        return "Invalid token: missing sub"
-
+async def _load_access_context(interview_token: str, user_id: str) -> Tuple[Optional[Interview], Optional[User]]:
     async with AsyncSessionLocal() as db:
-        # Load interview by access_token with all needed relationships
-        res = await db.execute(
+        iv_res = await db.execute(
             select(Interview)
             .options(
                 selectinload(Interview.hr).selectinload(User.organisation),
                 selectinload(Interview.interviewers).selectinload(InterviewInterviewer.interviewer),
+                selectinload(Interview.candidate),
             )
             .where(Interview.access_token == interview_token)
         )
-        iv = res.scalar_one_or_none()
-        if not iv:
-            return "Interview not found"
+        interview = iv_res.scalar_one_or_none()
+        if not interview:
+            return None, None
 
-        # Load user
-        ures = await db.execute(
+        user_res = await db.execute(
             select(User)
             .options(selectinload(User.organisation))
             .where(User.id == user_id)
         )
-        user = ures.scalar_one_or_none()
-        if not user or not user.is_active:
-            return "User not found or inactive"
-
-        if role == "candidate":
-            if user.role == UserRole.ADMIN:
-                return None  # admin can join as candidate for testing
-            if user.id == iv.candidate_id:
-                return None
-            return "Not authorized: not the candidate for this interview"
-
-        elif role == "watcher":
-            if user.role == UserRole.ADMIN:
-                return None
-
-            if user.role == UserRole.HR:
-                # HR must be in the same organisation as the interview's HR
-                hr_org = iv.hr.organisation_id if iv.hr else None
-                if hr_org and user.organisation_id == hr_org:
-                    return None
-                return "Not authorized: HR is not in the same organisation"
-
-            if user.role == UserRole.INTERVIEWER:
-                assigned_ids = {ii.interviewer_id for ii in iv.interviewers}
-                if user.id in assigned_ids:
-                    return None
-                return "Not authorized: Interviewer not assigned to this interview"
-
-            return "Not authorized: insufficient role"
-
-        return "Invalid role"
+        user = user_res.scalar_one_or_none()
+        return interview, user
 
 
-# ── Signaling backends ────────────────────────────────────────────────────────
-
-class InMemoryBackend:
-    """
-    Single-worker in-memory signaling.
-    Works perfectly for single uvicorn worker (--workers 1, default dev).
-    NOT safe for multi-worker deployments — each worker has isolated memory.
-    For multi-worker: set REDIS_URL in .env and install redis[asyncio].
-    """
-    def __init__(self):
-        # rooms[token] = {"candidate": ws|None, "watchers": [ws, ...]}
-        self._rooms: dict = defaultdict(lambda: {"candidate": None, "watchers": []})
-
-    def get_room(self, token: str) -> dict:
-        return self._rooms[token]
-
-    def set_candidate(self, token: str, ws: Optional[WebSocket]):
-        self._rooms[token]["candidate"] = ws
-
-    def add_watcher(self, token: str, ws: WebSocket):
-        self._rooms[token]["watchers"].append(ws)
-
-    def remove_watcher(self, token: str, ws: WebSocket):
-        if ws in self._rooms[token]["watchers"]:
-            self._rooms[token]["watchers"].remove(ws)
-
-    def is_empty(self, token: str) -> bool:
-        r = self._rooms.get(token)
-        return r is None or (not r["candidate"] and not r["watchers"])
-
-    def cleanup(self, token: str):
-        if token in self._rooms:
-            del self._rooms[token]
-
-    async def broadcast_to_watchers(self, token: str, raw: str, exclude: WebSocket = None):
-        for ws in list(self._rooms[token]["watchers"]):
-            if ws is exclude:
-                continue
-            try:
-                await ws.send_text(raw)
-            except Exception:
-                pass
-
-    async def send_to_candidate(self, token: str, raw: str):
-        cand = self._rooms[token]["candidate"]
-        if cand:
-            try:
-                await cand.send_text(raw)
-            except Exception:
-                pass
-
-    async def broadcast_status(self, token: str):
-        room = self._rooms.get(token, {"candidate": None, "watchers": []})
-        msg = json.dumps({
-            "type": "status",
-            "candidates": 1 if room["candidate"] else 0,
-            "watchers": len(room["watchers"]),
-        })
-        if room["candidate"]:
-            try:
-                await room["candidate"].send_text(msg)
-            except Exception:
-                pass
-        for ws in list(room["watchers"]):
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                pass
-
-    # Lifecycle hooks (no-ops for in-memory)
-    async def on_connect(self, token: str, role: str, ws: WebSocket): pass
-    async def on_disconnect(self, token: str, role: str, ws: WebSocket): pass
+def _server_role_for_user(interview: Interview, user: User) -> Optional[str]:
+    if not user or not user.is_active:
+        return None
+    if user.role == UserRole.ADMIN:
+        return "admin"
+    if interview.candidate_id == user.id:
+        return "candidate"
+    if user.role == UserRole.HR:
+        hr_org = interview.hr.organisation_id if interview.hr else None
+        if hr_org and user.organisation_id == hr_org:
+            return "hr"
+        return None
+    if user.role == UserRole.INTERVIEWER:
+        assigned_ids = {ii.interviewer_id for ii in interview.interviewers}
+        if user.id in assigned_ids:
+            return "interviewer"
+        return None
+    return None
 
 
-class RedisBackend:
-    """
-    Multi-worker Redis pub/sub signaling.
-    Each worker holds its own WebSocket connections locally.
-    Messages are relayed through Redis so any worker can deliver to its local WS.
-
-    Channel per interview: hireai:rtc:{token}
-    Message envelope:      {"dir": "to_watchers"|"to_candidate"|"status", "data": <raw JSON string>}
-    """
-    def __init__(self, redis_url: str):
-        self._redis_url = redis_url
-        self._redis = None
-        self._pubsub_tasks: dict[str, asyncio.Task] = {}
-        # Local WS registry — only this worker's connections
-        self._rooms: dict = defaultdict(lambda: {"candidate": None, "watchers": []})
-
-    async def _get_redis(self):
-        if self._redis is None:
-            import redis.asyncio as aioredis
-            self._redis = await aioredis.from_url(self._redis_url, decode_responses=True)
-        return self._redis
-
-    def _channel(self, token: str) -> str:
-        return f"hireai:rtc:{token}"
-
-    def get_room(self, token: str) -> dict:
-        return self._rooms[token]
-
-    def set_candidate(self, token: str, ws: Optional[WebSocket]):
-        self._rooms[token]["candidate"] = ws
-
-    def add_watcher(self, token: str, ws: WebSocket):
-        self._rooms[token]["watchers"].append(ws)
-
-    def remove_watcher(self, token: str, ws: WebSocket):
-        if ws in self._rooms[token]["watchers"]:
-            self._rooms[token]["watchers"].remove(ws)
-
-    def is_empty(self, token: str) -> bool:
-        r = self._rooms.get(token)
-        return r is None or (not r["candidate"] and not r["watchers"])
-
-    def cleanup(self, token: str):
-        if token in self._rooms:
-            del self._rooms[token]
-        if token in self._pubsub_tasks:
-            self._pubsub_tasks[token].cancel()
-            del self._pubsub_tasks[token]
-
-    async def _publish(self, token: str, direction: str, raw: str):
-        r = await self._get_redis()
-        envelope = json.dumps({"dir": direction, "data": raw})
-        await r.publish(self._channel(token), envelope)
-
-    async def _subscribe_loop(self, token: str):
-        """Background task: listen for Redis messages and deliver to local WS connections."""
-        try:
-            import redis.asyncio as aioredis
-            r = await aioredis.from_url(self._redis_url, decode_responses=True)
-            ps = r.pubsub()
-            await ps.subscribe(self._channel(token))
-            async for raw_msg in ps.listen():
-                if raw_msg["type"] != "message":
-                    continue
-                try:
-                    env = json.loads(raw_msg["data"])
-                    direction = env["dir"]
-                    data = env["data"]
-                    room = self._rooms.get(token, {"candidate": None, "watchers": []})
-                    if direction == "to_watchers":
-                        for ws in list(room["watchers"]):
-                            try:
-                                await ws.send_text(data)
-                            except Exception:
-                                pass
-                    elif direction == "to_candidate":
-                        if room["candidate"]:
-                            try:
-                                await room["candidate"].send_text(data)
-                            except Exception:
-                                pass
-                except Exception as e:
-                    logger.warning(f"Redis pubsub error: {e}")
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.error(f"Redis subscribe loop crashed for {token[:8]}: {e}")
-
-    async def broadcast_to_watchers(self, token: str, raw: str, exclude: WebSocket = None):
-        await self._publish(token, "to_watchers", raw)
-
-    async def send_to_candidate(self, token: str, raw: str):
-        await self._publish(token, "to_candidate", raw)
-
-    async def broadcast_status(self, token: str):
-        room = self._rooms.get(token, {"candidate": None, "watchers": []})
-        msg = json.dumps({
-            "type": "status",
-            "candidates": 1 if room["candidate"] else 0,
-            "watchers": len(room["watchers"]),
-        })
-        await self._publish(token, "to_watchers", msg)
-        await self._publish(token, "to_candidate", msg)
-
-    async def on_connect(self, token: str, role: str, ws: WebSocket):
-        # Start subscribe loop for this room if not already running
-        if token not in self._pubsub_tasks:
-            task = asyncio.create_task(self._subscribe_loop(token))
-            self._pubsub_tasks[token] = task
-
-    async def on_disconnect(self, token: str, role: str, ws: WebSocket): pass
+async def _send_json_safe(ws: WebSocket, payload: dict) -> bool:
+    try:
+        await ws.send_text(json.dumps(payload))
+        return True
+    except Exception:
+        return False
 
 
-# ── Instantiate backend based on config ──────────────────────────────────────
-
-def _make_backend():
-    if settings.REDIS_URL:
-        try:
-            import redis.asyncio  # noqa
-            logger.info(f"WebRTC: using Redis backend ({settings.REDIS_URL})")
-            return RedisBackend(settings.REDIS_URL)
-        except ImportError:
-            logger.warning(
-                "REDIS_URL is set but redis[asyncio] is not installed. "
-                "Falling back to in-memory backend. "
-                "Run: pip install 'redis[asyncio]'"
-            )
-    logger.info("WebRTC: using in-memory backend (single-worker mode)")
-    return InMemoryBackend()
+async def _send_snapshot(interview_token: str, to_ws: Optional[WebSocket] = None) -> None:
+    participants = await room_manager.snapshot(interview_token)
+    payload = {
+        "type": "participants_snapshot",
+        "participants": participants,
+        "participant_count": len(participants),
+    }
+    if to_ws is not None:
+        await _send_json_safe(to_ws, payload)
+        return
+    for ws in await room_manager.others_ws(interview_token):
+        await _send_json_safe(ws, payload)
 
 
-_backend = _make_backend()
+async def _broadcast(interview_token: str, payload: dict, exclude_pid: Optional[str] = None) -> None:
+    sockets = await room_manager.others_ws(interview_token, exclude_participant_id=exclude_pid)
+    for ws in sockets:
+        await _send_json_safe(ws, payload)
 
-
-# ── WebSocket endpoint ────────────────────────────────────────────────────────
 
 @router.websocket("/ws/rtc/{interview_token}")
 async def rtc_signaling(
     websocket: WebSocket,
     interview_token: str,
-    role: str = Query(..., description="'candidate' or 'watcher'"),
+    role: str = Query(default="participant", description="client hint only"),
     token: str = Query(default=None, description="JWT bearer token"),
 ):
-    """
-    WebRTC signaling relay with full authorization.
+    participant = None
+    joined = False
 
-    URL: ws://host/ws/rtc/{interview_access_token}?role=candidate|watcher&token={JWT}
-
-    Authorization is enforced BEFORE accept().
-    """
-    # ── 1. Basic validation ──
     if not token:
         await websocket.close(code=4001, reason="Missing auth token")
         return
@@ -318,83 +115,178 @@ async def rtc_signaling(
         await websocket.close(code=4003, reason="Invalid or expired JWT")
         return
 
-    if role not in ("candidate", "watcher"):
-        await websocket.close(code=4000, reason="role must be 'candidate' or 'watcher'")
+    user_id = jwt_payload.get("sub")
+    if not user_id:
+        await websocket.close(code=4003, reason="Invalid token payload")
         return
 
-    # ── 2. Authorization check (DB lookup, before accept) ──
-    denial = await _authorize(interview_token, jwt_payload, role)
-    if denial:
-        logger.warning(f"RTC auth denied [{role}] room={interview_token[:8]}: {denial}")
-        await websocket.close(code=4003, reason=denial)
+    if not await room_manager.allow_join(interview_token, user_id):
+        await websocket.close(code=4008, reason="Join rate limit exceeded")
         return
 
-    # ── 3. Accept and register ──
+    interview, user = await _load_access_context(interview_token, user_id)
+    if not interview:
+        await websocket.close(code=4004, reason="Interview not found")
+        return
+    if not user:
+        await websocket.close(code=4003, reason="User not found")
+        return
+
+    server_role = _server_role_for_user(interview, user)
+    if not server_role:
+        await websocket.close(code=4003, reason="Not authorized for this room")
+        return
+
     await websocket.accept()
-    await _backend.on_connect(interview_token, role, websocket)
 
-    if role == "candidate":
-        _backend.set_candidate(interview_token, websocket)
-        logger.info(f"RTC: candidate joined room {interview_token[:8]}")
-    else:
-        _backend.add_watcher(interview_token, websocket)
-        logger.info(f"RTC: watcher joined room {interview_token[:8]}")
+    participant, join_err = await room_manager.join(
+        room_token=interview_token,
+        user_id=user.id,
+        role=server_role,
+        display_name=user.full_name or user.email,
+        ws=websocket,
+    )
+    if join_err == "duplicate_join":
+        await _send_json_safe(websocket, {"type": "error", "detail": "Duplicate join detected"})
+        await websocket.close(code=4009, reason="Duplicate join")
+        return
+    if join_err == "room_full":
+        await _send_json_safe(websocket, {"type": "error", "detail": "Room capacity reached"})
+        await websocket.close(code=4010, reason="Room full")
+        return
+    if not participant:
+        await websocket.close(code=1011, reason="Could not join room")
+        return
 
-    await _backend.broadcast_status(interview_token)
+    joined = True
+    logger.info(
+        "RTC join room=%s participant=%s user=%s role=%s client_role=%s",
+        interview_token[:8], participant.participant_id, user.id, server_role, role
+    )
 
-    # If new watcher joins and candidate is present, ask candidate to re-offer
-    if role == "watcher":
-        room = _backend.get_room(interview_token)
-        if room["candidate"]:
-            try:
-                await room["candidate"].send_text(json.dumps({"type": "request_offer"}))
-            except Exception:
-                pass
+    await _send_json_safe(websocket, {
+        "type": "joined",
+        "participant": participant.as_public(),
+        "room_capacity": settings.RTC_ROOM_CAPACITY,
+    })
 
-    # ── 4. Message relay loop ──
+    participants_now = await room_manager.snapshot(interview_token)
+    await _send_json_safe(websocket, {
+        "type": "participants_snapshot",
+        "participants": participants_now,
+        "participant_count": len(participants_now),
+    })
+
+    await _broadcast(
+        interview_token,
+        {
+            "type": "participant_joined",
+            "participant": participant.as_public(),
+            "participant_count": len(participants_now),
+        },
+        exclude_pid=participant.participant_id,
+    )
+
+    for peer in participants_now:
+        peer_pid = peer.get("participant_id")
+        if not peer_pid or peer_pid == participant.participant_id:
+            continue
+        peer_ws = await room_manager.get_ws(interview_token, peer_pid)
+        if peer_ws:
+            await _send_json_safe(peer_ws, {"type": "negotiate_with", "participant_id": participant.participant_id})
+
     try:
         while True:
-            raw = await websocket.receive_text()
+            try:
+                raw = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=float(settings.RTC_SIGNAL_TIMEOUT_SECONDS),
+                )
+            except asyncio.TimeoutError:
+                await _send_json_safe(websocket, {"type": "ping"})
+                continue
+
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
+                await _send_json_safe(websocket, {"type": "error", "detail": "Invalid JSON"})
                 continue
 
             msg_type = msg.get("type")
+            if msg_type == "ping":
+                await _send_json_safe(websocket, {"type": "pong"})
+                continue
+            if msg_type == "pong":
+                continue
 
-            if msg_type == "offer" and role == "candidate":
-                await _backend.broadcast_to_watchers(interview_token, raw, exclude=websocket)
-
-            elif msg_type == "answer" and role == "watcher":
-                await _backend.send_to_candidate(interview_token, raw)
-
-            elif msg_type == "ice":
-                if role == "candidate":
-                    await _backend.broadcast_to_watchers(interview_token, raw, exclude=websocket)
+            if msg_type in ("offer", "answer", "ice"):
+                target_pid = msg.get("to")
+                if not target_pid:
+                    await _send_json_safe(websocket, {"type": "error", "detail": "Missing target participant id"})
+                    continue
+                target_ws = await room_manager.get_ws(interview_token, target_pid)
+                if not target_ws:
+                    await _send_json_safe(websocket, {"type": "error", "detail": "Target participant not found"})
+                    continue
+                relay = {"type": msg_type, "from": participant.participant_id, "to": target_pid}
+                if msg_type in ("offer", "answer"):
+                    relay["sdp"] = msg.get("sdp")
                 else:
-                    await _backend.send_to_candidate(interview_token, raw)
+                    relay["candidate"] = msg.get("candidate")
+                await _send_json_safe(target_ws, relay)
+                continue
 
-            elif msg_type == "ping":
-                await websocket.send_text(json.dumps({"type": "pong"}))
+            if msg_type == "media_state":
+                mic_on = bool(msg.get("mic_on", True))
+                cam_on = bool(msg.get("cam_on", True))
+                await room_manager.update_media(interview_token, participant.participant_id, mic_on, cam_on)
+                participants = await room_manager.snapshot(interview_token)
+                await _broadcast(
+                    interview_token,
+                    {
+                        "type": "participant_media",
+                        "participant_id": participant.participant_id,
+                        "mic_on": mic_on,
+                        "cam_on": cam_on,
+                        "participant_count": len(participants),
+                    },
+                    exclude_pid=participant.participant_id,
+                )
+                continue
+
+            if msg_type == "speaking_state":
+                speaking = bool(msg.get("speaking", False))
+                await room_manager.update_speaking(interview_token, participant.participant_id, speaking)
+                await _broadcast(
+                    interview_token,
+                    {"type": "speaking_state", "participant_id": participant.participant_id, "speaking": speaking},
+                    exclude_pid=participant.participant_id,
+                )
+                continue
+
+            await _send_json_safe(websocket, {"type": "error", "detail": f"Unsupported message type: {msg_type}"})
 
     except WebSocketDisconnect:
-        pass
+        logger.info("RTC disconnect room=%s participant=%s", interview_token[:8], participant.participant_id if participant else "-")
+    except Exception as exc:
+        logger.exception(
+            "RTC error room=%s participant=%s err=%s",
+            interview_token[:8],
+            participant.participant_id if participant else "-",
+            exc,
+        )
+        await _send_json_safe(websocket, {"type": "error", "detail": "Server signaling error"})
     finally:
-        if role == "candidate":
-            _backend.set_candidate(interview_token, None)
-            # Notify watchers
-            await _backend.broadcast_to_watchers(
+        if joined and participant:
+            await room_manager.leave(interview_token, participant.participant_id)
+            remaining = await room_manager.snapshot(interview_token)
+            await _broadcast(
                 interview_token,
-                json.dumps({"type": "candidate_left"})
+                {
+                    "type": "participant_left",
+                    "participant_id": participant.participant_id,
+                    "participant_count": len(remaining),
+                },
+                exclude_pid=None,
             )
-            logger.info(f"RTC: candidate left room {interview_token[:8]}")
-        else:
-            _backend.remove_watcher(interview_token, websocket)
-            logger.info(f"RTC: watcher left room {interview_token[:8]}")
-
-        await _backend.on_disconnect(interview_token, role, websocket)
-
-        if _backend.is_empty(interview_token):
-            _backend.cleanup(interview_token)
-
-        await _backend.broadcast_status(interview_token)
+            await _send_snapshot(interview_token)

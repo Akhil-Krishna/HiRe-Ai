@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
+    SENDGRID_API_KEY: str = ""
+    SENDGRID_FROM_EMAIL: str = ""
 
     # LLM: groq | ollama | openai | mock
     LLM_PROVIDER: str = "groq"
@@ -45,6 +47,12 @@ class Settings(BaseSettings):
     # Set to redis://localhost:6379/0 for multi-worker deployments.
     # Install: pip install redis[asyncio]
     REDIS_URL: Optional[str] = None
+
+    # RTC / Meeting room
+    RTC_ROOM_CAPACITY: int = 12
+    RTC_SIGNAL_TIMEOUT_SECONDS: int = 45
+    RTC_JOIN_RATE_LIMIT: int = 6
+    RTC_JOIN_WINDOW_SECONDS: int = 30
 
     # Whisper STT
     STT_MODEL: str = "base"    # tiny | base | small | medium
