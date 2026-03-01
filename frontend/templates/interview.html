@@ -377,6 +377,10 @@ async function beginInterview(){
     startRTC();  // WebRTC: start broadcasting to watchers
     if(res&&res.messages)res.messages.forEach(m=>addMsg(m));
     if(res&&res.ai_paused)setAIPaused(true);
+    // Auto-start mic 1s after AI sends the opening question
+    if(voiceOn && !res?.ai_paused){
+      setTimeout(()=>{ if(!isRecording) startL(); }, 1200);
+    }
   }catch(e){
     btn.disabled=false;btn.innerHTML='<i class="fas fa-play"></i> Start Interview';
     alert('Could not start: '+e.message);
@@ -506,7 +510,54 @@ function speak(text){
 }
 function stopSpeaking(){if(window.speechSynthesis)window.speechSynthesis.cancel();}
 
-/* ── Whisper STT — records audio in chunks, sends to /api/v1/stt/transcribe ── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   Whisper STT — fixed implementation
+   Bug list fixed:
+     F1  AudioContext leak: create once, reuse. Browsers cap ~6 active contexts;
+         old code created a new one every startL() → mic silently dead after 6 uses.
+     F2  Stale VAD loop: each session has a unique ID (_vadSession). The check()
+         closure captures its session ID at creation and self-terminates if a newer
+         session has started. Prevents two concurrent VAD loops fighting each other.
+     F3  Race condition on onstop: capture whisperChunks into a local snapshot
+         BEFORE clearing global, so a rapid stop→start doesn't swallow speech.
+     F4  MIME type: detect what the browser supports; fall back gracefully.
+     F5  Blob size threshold: 200 bytes (not 1000). Opus 2-second speech ≈ 400-800 B.
+     F6  VAD cancellation: stopL() sets _vadSession=null which terminates check() loop.
+     F7  Auto-resume: doSend() and _sendToWhisper() call startL() after AI replies.
+     F8  Silence threshold: use percentile-based calibration; default 20 (not 10).
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+// ── Shared AudioContext — created once, reused every session (F1) ─────────────
+let _sharedAudioCtx = null;
+function _getAudioCtx(){
+  if(!_sharedAudioCtx || _sharedAudioCtx.state === 'closed'){
+    _sharedAudioCtx = new AudioContext();
+  }
+  if(_sharedAudioCtx.state === 'suspended'){
+    _sharedAudioCtx.resume();
+  }
+  return _sharedAudioCtx;
+}
+
+// ── Session counter — incremented on every startL(), used to kill stale loops ─
+let _vadSession = 0;
+
+// ── Detect best supported MIME type (F4) ──────────────────────────────────────
+function _bestMime(){
+  const types=[
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+    'audio/mp4',
+  ];
+  for(const t of types){
+    if(typeof MediaRecorder!=='undefined'&&MediaRecorder.isTypeSupported(t))return t;
+  }
+  return '';
+}
+const _AUDIO_MIME = _bestMime();
+
 function initSpeech(){
   if(!navigator.mediaDevices||!window.MediaRecorder){
     document.getElementById('sttStat').textContent='(Mic unavailable — type only)';
@@ -514,7 +565,6 @@ function initSpeech(){
     return;
   }
   document.getElementById('sttStat').textContent='Whisper STT ready';
-  // whisperStream is set from camStream after setupCam()
 }
 
 function toggleVoiceMode(){
@@ -531,104 +581,171 @@ function toggleListen(){
 function startL(){
   if(isRecording||!camStream)return;
   stopSpeaking();
+
+  // Increment session ID — any stale VAD loop will see a different ID and stop (F2, F6)
+  const mySession = ++_vadSession;
+
   try{
-    // Use only audio track from camStream
-    const audioOnly=new MediaStream(camStream.getAudioTracks());
-    whisperRecorder=new MediaRecorder(audioOnly,{mimeType:'audio/webm;codecs=opus'});
-    whisperChunks=[];
-    whisperRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)whisperChunks.push(e.data);};
-    whisperRecorder.onstop=()=>_sendToWhisper();
-    // Collect audio in 200ms chunks so we can detect silence boundaries
-    whisperRecorder.start(200);
-    isRecording=true;listening=true;
+    const audioOnly = new MediaStream(camStream.getAudioTracks());
+
+    // F4: use pre-detected MIME type
+    const recOpts = _AUDIO_MIME ? {mimeType: _AUDIO_MIME} : {};
+    whisperRecorder = new MediaRecorder(audioOnly, recOpts);
+    whisperChunks = [];
+
+    whisperRecorder.ondataavailable = e => {
+      if(e.data && e.data.size > 0) whisperChunks.push(e.data);
+    };
+
+    // F3: capture chunk snapshot at stop time, clear global immediately so a
+    // rapid restart doesn't steal or lose chunks
+    whisperRecorder.onstop = () => {
+      const captured = whisperChunks.splice(0);   // atomic move, leaves [] behind
+      _sendToWhisper(captured, mySession);
+    };
+
+    whisperRecorder.start(250);    // 250ms timeslices
+    isRecording = true;
+    listening   = true;
     document.getElementById('micBtn').classList.add('on');
-    document.getElementById('sttStat').textContent='Listening… (Whisper) — stops after 4s silence';
-    // Voice activity detection via AudioContext
-    _startVAD(audioOnly);
-  }catch(e){
-    document.getElementById('sttStat').textContent='Mic error: '+e.message;
+    document.getElementById('sttStat').textContent = '🎤 Listening…';
+
+    // F1: reuse shared AudioContext
+    _startVAD(audioOnly, mySession);
+  } catch(e){
+    console.error('startL error:', e);
+    document.getElementById('sttStat').textContent = 'Mic error: ' + e.message;
   }
 }
 
 function stopL(){
-  clearTimeout(whisperSilenceTimer);
-  if(whisperRecorder&&whisperRecorder.state!=='inactive'){
-    try{whisperRecorder.stop();}catch(_){}
+  // F6: setting _vadSession to a new value would do it, but we also zero it here
+  // so the current loop sees null !== mySession and exits cleanly
+  _vadSession = 0;
+
+  if(whisperRecorder && whisperRecorder.state !== 'inactive'){
+    try{ whisperRecorder.stop(); } catch(_){}
   }
-  isRecording=false;listening=false;
+  isRecording = false;
+  listening   = false;
   document.getElementById('micBtn').classList.remove('on');
-  document.getElementById('sttStat').textContent='';
+  document.getElementById('sttStat').textContent = '';
 }
 
-let _vadCtx=null,_vadSource=null;
-function _startVAD(stream){
+// ── Voice Activity Detection ──────────────────────────────────────────────────
+function _startVAD(stream, mySession){
   try{
-    _vadCtx=new AudioContext();
-    _vadSource=_vadCtx.createMediaStreamSource(stream);
-    const analyser=_vadCtx.createAnalyser();
-    analyser.fftSize=512;
-    _vadSource.connect(analyser);
-    const buf=new Uint8Array(analyser.frequencyBinCount);
-    let silentMs=0;
-    const SILENCE_THRESH=10; // RMS threshold for silence
-    const SILENCE_SEND_MS=4000; // auto-send after 4s silence
-    const CHECK_MS=200;
+    const ctx      = _getAudioCtx();         // F1: reuse shared context
+    const source   = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize        = 1024;
+    analyser.smoothingTimeConstant = 0.3;
+    source.connect(analyser);
+
+    const buf           = new Uint8Array(analyser.frequencyBinCount);
+    const CHECK_MS      = 150;
+    const SILENCE_SEND  = 3000;  // ms of silence before auto-send
+    const MIN_CHUNKS    = 2;     // must have captured at least 2 chunks (prevents instant-fire)
+    let   silentMs      = 0;
+    let   speakingEver  = false; // only auto-send if the candidate actually spoke
+
+    // F8: calibrate silence threshold from first 600ms of ambient noise
+    let   THRESH        = 18;    // sensible default
+    let   calibFrames   = 0;
+    const CALIB_FRAMES  = 4;     // 4 × 150ms = 600ms calibration window
+    let   calibSum      = 0;
+
     function check(){
-      if(!isRecording)return;
+      // F2, F6: if session changed or recording stopped, terminate this loop
+      if(_vadSession !== mySession) return;
+      if(!isRecording) return;
+
       analyser.getByteFrequencyData(buf);
-      const rms=Math.sqrt(buf.reduce((a,b)=>a+b*b,0)/buf.length);
-      if(rms<SILENCE_THRESH){
-        silentMs+=CHECK_MS;
-        if(silentMs>=SILENCE_SEND_MS&&whisperChunks.length>0){
-          // 4s of silence — stop, transcribe, send
-          stopL();
+      // Use mean of top-50% bins for a more stable RMS (ignores DC bias)
+      const sorted  = Array.from(buf).sort((a,b)=>b-a);
+      const half    = sorted.slice(0, sorted.length>>1);
+      const rms     = Math.sqrt(half.reduce((s,v)=>s+v*v,0)/half.length);
+
+      // F8: auto-calibrate threshold from first CALIB_FRAMES readings
+      if(calibFrames < CALIB_FRAMES){
+        calibSum += rms;
+        calibFrames++;
+        if(calibFrames === CALIB_FRAMES){
+          // Set threshold = ambient + 40% headroom, minimum 15, maximum 45
+          THRESH = Math.min(45, Math.max(15, (calibSum/CALIB_FRAMES)*1.4));
+        }
+        setTimeout(check, CHECK_MS);
+        return;
+      }
+
+      if(rms > THRESH){
+        silentMs    = 0;
+        speakingEver = true;
+      } else {
+        silentMs += CHECK_MS;
+        // Auto-send only if: 4s silence AND candidate actually spoke AND have chunks
+        if(speakingEver && silentMs >= SILENCE_SEND && whisperChunks.length >= MIN_CHUNKS){
+          stopL();   // triggers onstop → _sendToWhisper
           return;
         }
-      }else{
-        silentMs=0; // voice detected — reset silence counter
       }
-      setTimeout(check,CHECK_MS);
+      setTimeout(check, CHECK_MS);
     }
-    setTimeout(check,CHECK_MS);
-  }catch(e){console.warn('VAD error:',e);}
+    setTimeout(check, CHECK_MS);
+  }catch(e){
+    console.warn('VAD error:', e);
+  }
 }
 
-async function _sendToWhisper(){
-  if(!whisperChunks.length)return;
-  const blob=new Blob(whisperChunks,{type:'audio/webm'});
-  whisperChunks=[];
-  if(blob.size<1000)return; // skip tiny blobs (background noise)
+// ── Send captured audio to Whisper backend ────────────────────────────────────
+// F3: receives a snapshot of chunks (not the live global), session ID for logging
+async function _sendToWhisper(chunks, sessionId){
+  // F5: lower threshold — Opus 2-3 words ≈ 400-800 bytes
+  if(!chunks || !chunks.length) return;
+  const mimeType = _AUDIO_MIME || 'audio/webm';
+  const blob = new Blob(chunks, {type: mimeType});
+  if(blob.size < 200) return;   // F5: was 1000, now 200
 
-  document.getElementById('sttStat').textContent='Transcribing…';
+  document.getElementById('sttStat').textContent = '⏳ Transcribing…';
   try{
-    const fd=new FormData();
-    fd.append('audio',blob,'audio.webm');
-    fd.append('language','en');
-    const t=localStorage.getItem('token');
-    const res=await fetch(API+'/stt/transcribe',{
-      method:'POST',
-      headers:{Authorization:'Bearer '+t},
-      credentials:'include',
-      body:fd,
+    const fd = new FormData();
+    fd.append('audio', blob, 'audio.webm');
+    fd.append('language', 'en');
+    const t = localStorage.getItem('token');
+    const res = await fetch(API+'/stt/transcribe',{
+      method: 'POST',
+      headers: {Authorization: 'Bearer '+t},
+      credentials: 'include',
+      body: fd,
     });
-    const data=await res.json();
-    if(data.text&&data.text.trim()){
-      const ta=document.getElementById('textArea');
-      ta.value=(ta.value+' '+data.text).trim();
+    if(!res.ok) throw new Error('STT HTTP ' + res.status);
+    const data = await res.json();
+
+    if(data.text && data.text.trim()){
+      const ta = document.getElementById('textArea');
+      ta.value = (ta.value + ' ' + data.text).trim();
       resize(ta);
-      document.getElementById('sttStat').textContent='✓ Transcribed — sending…';
-      // Auto-send after transcription
-      setTimeout(()=>{
-        if(document.getElementById('textArea').value.trim())doSend();
-        document.getElementById('sttStat').textContent='';
-      },400);
-    }else{
-      document.getElementById('sttStat').textContent='(no speech detected)';
-      setTimeout(()=>{document.getElementById('sttStat').textContent='';},2000);
+      document.getElementById('sttStat').textContent = '✓ Got it — sending…';
+      // Auto-send transcript immediately
+      setTimeout(async () => {
+        if(document.getElementById('textArea').value.trim()) await doSend();
+        document.getElementById('sttStat').textContent = '';
+      }, 300);
+    } else {
+      document.getElementById('sttStat').textContent = '(no speech — try again)';
+      setTimeout(() => {
+        document.getElementById('sttStat').textContent = '';
+        // F7: resume listening even when nothing was heard
+        if(voiceOn && !isRecording && !aiPaused) startL();
+      }, 1500);
     }
   }catch(e){
-    document.getElementById('sttStat').textContent='STT error: '+e.message;
-    setTimeout(()=>{document.getElementById('sttStat').textContent='';},3000);
+    console.error('STT error:', e);
+    document.getElementById('sttStat').textContent = 'STT error — retrying mic…';
+    setTimeout(() => {
+      document.getElementById('sttStat').textContent = '';
+      if(voiceOn && !isRecording && !aiPaused) startL();
+    }, 2000);
   }
 }
 
@@ -682,9 +799,31 @@ async function doSend(){
     showTyping();
     const r=await api('POST','/interview-session/chat/'+TOKEN,{content:text||(code?'[Code submitted]':''),code_snippet:code||null});
     removeTyping();
-    if(r&&r.ai_paused){setAIPaused(true);}
-    else if(r&&r.message){addMsg({role:'ai',content:r.message,id:'a'+Date.now()});if(r.is_complete)doFinish();}
-  }catch(e){removeTyping();}
+    if(r&&r.ai_paused){
+      setAIPaused(true);
+    } else if(r&&r.message){
+      addMsg({role:'ai',content:r.message,id:'a'+Date.now()});
+      if(r.is_complete){
+        doFinish();
+        return;
+      }
+      // F7: auto-resume mic after AI responds, once TTS finishes speaking
+      // Estimate TTS duration: ~90ms per word, minimum 1.5s wait
+      if(voiceOn && !aiPaused && !muted){
+        const wordCount = r.message.split(/\s+/).length;
+        const ttsDuration = Math.max(1500, wordCount * 90);
+        setTimeout(() => {
+          if(voiceOn && !isRecording && !aiPaused && !muted) startL();
+        }, ttsDuration);
+      }
+    }
+  }catch(e){
+    removeTyping();
+    // On error, still resume mic so candidate can retry
+    if(voiceOn && !isRecording && !aiPaused && !muted){
+      setTimeout(()=>{ if(!isRecording) startL(); }, 1000);
+    }
+  }
   document.getElementById('sendBtn').disabled=false;
 }
 

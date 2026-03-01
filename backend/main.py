@@ -17,6 +17,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     await create_default_data()
 
+    # Pre-load Whisper STT model so the first candidate request is instant.
+    # Model loads in a background thread; server is ready immediately.
+    try:
+        from app.services.whisper_service import warmup_model
+        import asyncio
+        asyncio.create_task(warmup_model())
+    except Exception as _e:
+        print(f"Whisper warmup skipped: {_e}")
+
     print("=" * 60)
     print(f"  {settings.APP_NAME}  —  {settings.APP_ENV}")
     print(f"  LLM_PROVIDER    : {settings.LLM_PROVIDER}")
