@@ -42,3 +42,7 @@ faster-whisper==1.0.3
 # ── WebSocket support (already included via uvicorn[standard]) ─────────────────
 websockets>=12.0  # pulled in by uvicorn[standard]
 
+
+
+#cacheingredis==4.5.1
+redis>=4.2

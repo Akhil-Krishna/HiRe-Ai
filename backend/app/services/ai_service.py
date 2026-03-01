@@ -92,7 +92,7 @@ async def _chat_groq(system: str, messages: List[dict]) -> Optional[str]:
                 headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
             )
             resp.raise_for_status()
-            print("-----------------------------------\n\n response from groq 👍🏻\n\n -----------------------------------")
+            print("-----------------------------------\n\n response from groq --->\n\n -----------------------------------")
             return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error("Groq error: %s", e)

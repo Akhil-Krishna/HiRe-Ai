@@ -1,10 +1,9 @@
-import os
-import shutil
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List, Optional
+from typing import List
 
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_hr
@@ -14,6 +13,8 @@ from app.models.interview import Interview, InterviewInterviewer, InterviewStatu
 from app.schemas import InterviewCreate, InterviewWithInterviewers
 from app.services.email_service import send_interview_invite_sync, send_interviewer_notification_sync
 from pathlib import Path
+import os
+import shutil
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
@@ -23,15 +24,15 @@ def _eager_opts():
     return [
         selectinload(Interview.hr).selectinload(User.organisation),
         selectinload(Interview.candidate).selectinload(User.organisation),
-        selectinload(Interview.interviewers).selectinload(InterviewInterviewer.interviewer).selectinload(User.organisation),
+        selectinload(Interview.interviewers)
+            .selectinload(InterviewInterviewer.interviewer)
+            .selectinload(User.organisation),
     ]
 
 
 async def _load_interview(interview_id: str, db: AsyncSession) -> Interview:
     res = await db.execute(
-        select(Interview)
-        .options(*_eager_opts())
-        .where(Interview.id == interview_id)
+        select(Interview).options(*_eager_opts()).where(Interview.id == interview_id)
     )
     iv = res.scalar_one_or_none()
     if not iv:
@@ -41,9 +42,7 @@ async def _load_interview(interview_id: str, db: AsyncSession) -> Interview:
 
 async def _load_by_token(token: str, db: AsyncSession) -> Interview:
     res = await db.execute(
-        select(Interview)
-        .options(*_eager_opts())
-        .where(Interview.access_token == token)
+        select(Interview).options(*_eager_opts()).where(Interview.access_token == token)
     )
     iv = res.scalar_one_or_none()
     if not iv:
@@ -65,7 +64,7 @@ async def schedule_interview(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_hr),
 ):
-    # Find or auto-create candidate
+    # ── Find or auto-create candidate ──────────────────────────────────────────
     result = await db.execute(select(User).where(User.email == payload.candidate_email))
     candidate = result.scalar_one_or_none()
 
@@ -99,23 +98,53 @@ async def schedule_interview(
     db.add(interview)
     await db.flush()
 
-    # Assign interviewers — org-scoped
+    # ── Assign interviewers — with org + domain validation ─────────────────────
+    hr_domain = current_user.email.split("@")[1].lower()
+
     for interviewer_id in payload.interviewer_ids:
-        query = select(User).where(User.id == interviewer_id, User.role == UserRole.INTERVIEWER)
-        if current_user.organisation_id:
-            query = query.where(User.organisation_id == current_user.organisation_id)
-        r = await db.execute(query)
+        # Load interviewer with org relationship
+        r = await db.execute(
+            select(User)
+            .options(selectinload(User.organisation))
+            .where(User.id == interviewer_id, User.role == UserRole.INTERVIEWER)
+        )
         interviewer = r.scalar_one_or_none()
-        if interviewer:
-            db.add(InterviewInterviewer(interview_id=interview.id, interviewer_id=interviewer_id))
-            background_tasks.add_task(
-                send_interviewer_notification_sync,
-                interviewer_email=interviewer.email,
-                interviewer_name=interviewer.full_name,
-                interview_title=interview.title,
-                scheduled_at=interview.scheduled_at.strftime("%Y-%m-%d %H:%M UTC"),
-                dashboard_link=f"{settings.FRONTEND_URL}/",
+        if not interviewer:
+            continue  # skip unknown IDs silently
+
+        # FIX 5 — Organisation must match
+        if (
+            current_user.organisation_id
+            and interviewer.organisation_id != current_user.organisation_id
+        ):
+            raise HTTPException(
+                400,
+                f"Interviewer {interviewer.email} does not belong to your organisation. "
+                f"Only interviewers in the same organisation can be assigned.",
             )
+
+        # FIX 5 — Email domain must match
+        interviewer_domain = interviewer.email.split("@")[1].lower()
+        if interviewer_domain != hr_domain:
+            raise HTTPException(
+                400,
+                f"Interviewer {interviewer.email} has a different email domain "
+                f"(@{interviewer_domain}) than yours (@{hr_domain}). "
+                f"Only same-domain interviewers can be assigned.",
+            )
+
+        db.add(InterviewInterviewer(
+            interview_id=interview.id,
+            interviewer_id=interviewer_id,
+        ))
+        background_tasks.add_task(
+            send_interviewer_notification_sync,
+            interviewer_email=interviewer.email,
+            interviewer_name=interviewer.full_name,
+            interview_title=interview.title,
+            scheduled_at=interview.scheduled_at.strftime("%Y-%m-%d %H:%M UTC"),
+            dashboard_link=f"{settings.FRONTEND_URL}/",
+        )
 
     await db.flush()
 
@@ -165,6 +194,8 @@ async def upload_resume(
                 from pypdf import PdfReader
                 reader = PdfReader(io.BytesIO(content))
                 resume_text = "\n".join(p.extract_text() or "" for p in reader.pages)
+                #--------------------------- Debuging 
+                print("-----------------------------------------\n\nResume Extracted \n"+resume_text[0]+"\n\n-----------------------------------")
             except ImportError:
                 resume_text = "[PDF text extraction requires: pip install pypdf]"
         except Exception:
@@ -183,23 +214,38 @@ async def list_interviews(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role == UserRole.ADMIN:
+        # Admin sees everything
         query = select(Interview)
+
     elif current_user.role == UserRole.HR:
-        query = select(Interview).where(Interview.hr_id == current_user.id)
+        # FIX 2 — HR sees ALL interviews belonging to their organisation,
+        # not just the ones they personally created.
+        # Join Interview → hr (User) and filter by that user's organisation_id.
+        query = (
+            select(Interview)
+            .join(Interview.hr)                          # JOIN interviews → users ON hr_id
+            .where(User.organisation_id == current_user.organisation_id)
+        )
+
     elif current_user.role == UserRole.CANDIDATE:
+        # Candidate sees only their own interviews
         query = select(Interview).where(Interview.candidate_id == current_user.id)
+
     elif current_user.role == UserRole.INTERVIEWER:
+        # Interviewer sees only assigned interviews
         subq = select(InterviewInterviewer.interview_id).where(
             InterviewInterviewer.interviewer_id == current_user.id
         )
         query = select(Interview).where(Interview.id.in_(subq))
+
     else:
         query = select(Interview).where(Interview.id.is_(None))
 
     query = query.options(*_eager_opts()).order_by(Interview.scheduled_at.desc())
 
     result = await db.execute(query)
-    interviews_raw = result.scalars().all()
+    # scalars().unique() prevents duplicates when join produces multiple rows
+    interviews_raw = result.scalars().unique().all()
     return [_to_schema(iv) for iv in interviews_raw]
 
 
@@ -228,8 +274,18 @@ async def cancel_interview(
 
 
 def _check_access(interview: Interview, user: User):
-    if user.role in (UserRole.ADMIN, UserRole.HR):
+    """Fine-grained access check — mirrors _is_org_viewer in interview_session.py."""
+    if user.role == UserRole.ADMIN:
         return
+    if user.role == UserRole.HR:
+        # HR can only access interviews in their own organisation
+        if (
+            interview.hr
+            and interview.hr.organisation_id
+            and user.organisation_id == interview.hr.organisation_id
+        ):
+            return
+        raise HTTPException(403, "Access denied: interview belongs to a different organisation")
     if user.role == UserRole.CANDIDATE and interview.candidate_id == user.id:
         return
     if user.role == UserRole.INTERVIEWER:

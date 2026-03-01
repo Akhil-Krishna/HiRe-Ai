@@ -1,5 +1,7 @@
-# Interview session endpoints: join, chat, complete, interviewer controls (pause/resume AI, ask question)
-
+"""
+Interview Session — candidate chat, AI pause/resume, interviewer manual questions,
+live message streaming, completion with vision scores.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -43,9 +45,23 @@ async def _get_iv(token: str, db: AsyncSession) -> Interview:
 
 
 def _is_org_viewer(iv: Interview, user: User) -> bool:
-    if user.role in (UserRole.ADMIN, UserRole.HR):
+    """
+    Returns True if the user is authorised to watch/monitor this interview.
+    Enforces organisation-level isolation — HR can only view interviews
+    that belong to their own organisation.
+    """
+    if user.role == UserRole.ADMIN:
         return True
+    if user.role == UserRole.HR:
+        # HR is only allowed to monitor interviews inside their own organisation.
+        # iv.hr is the HR who created the interview; they share an organisation_id.
+        return (
+            iv.hr is not None
+            and iv.hr.organisation_id is not None
+            and user.organisation_id == iv.hr.organisation_id
+        )
     if user.role == UserRole.INTERVIEWER:
+        # Interviewer must be explicitly assigned to this interview.
         return any(ii.interviewer_id == user.id for ii in iv.interviewers)
     return False
 

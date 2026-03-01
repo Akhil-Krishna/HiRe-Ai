@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -7,7 +8,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
 
-    SECRET_KEY: str = "supersecretkey"  # Change
+    SECRET_KEY: str = "dev-secret-key-CHANGE-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
@@ -26,7 +27,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_TIMEOUT: float = 30.0
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2"
+    OLLAMA_MODEL: str = "llama3.2:1b"
     OLLAMA_TIMEOUT: float = 60.0
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
@@ -38,6 +39,17 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:8000"
     RECORDINGS_DIR: str = "recordings"
     UPLOADS_DIR: str = "uploads"
+
+    # Redis — optional, required for multi-worker WebRTC signaling.
+    # Leave empty (default) to use in-memory signaling (single-worker only).
+    # Set to redis://localhost:6379/0 for multi-worker deployments.
+    # Install: pip install redis[asyncio]
+    REDIS_URL: Optional[str] = None
+
+    # Whisper STT
+    STT_MODEL: str = "base"    # tiny | base | small | medium
+    STT_DEVICE: str = "cpu"    # cpu | cuda
+    STT_COMPUTE: str = "int8"  # int8 | float16 | float32
 
     class Config:
         env_file = ".env"

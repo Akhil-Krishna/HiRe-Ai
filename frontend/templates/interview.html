@@ -1,86 +1,117 @@
-<!-- testing teams -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HiRe.AI — Interview Room</title>
+<title>HirE.AI — Interview Room</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <style>
-:root{--primary:#4F46E5;--success:#10B981;--danger:#EF4444;--warning:#F59E0B;--bg:#0F172A;--panel:#1E293B;--border:#334155;--text:#F1F5F9;--muted:#94A3B8}
+:root{
+  --primary:#4F46E5;--success:#10B981;--danger:#EF4444;--warning:#F59E0B;
+  --bg:#0F172A;--panel:#1E293B;--panel2:#162032;--border:#334155;
+  --text:#F1F5F9;--muted:#94A3B8;--stage:#060C18;
+}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
-.room{display:grid;grid-template-columns:300px 1fr 300px;grid-template-rows:52px 1fr;height:100vh}
-.topbar{grid-column:1/-1;background:#1A1A2E;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:12px;z-index:50}
+
+/* Root grid: topbar + 3-column body */
+.room{display:grid;grid-template-columns:280px 1fr 320px;grid-template-rows:52px 1fr;height:100vh}
+
+/* Topbar */
+.topbar{grid-column:1/-1;background:#12172B;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:12px;z-index:50}
 .tb-left{display:flex;align-items:center;gap:12px}
-.tb-title{font-size:14px;font-weight:700;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tb-role{font-size:11px;color:var(--muted);background:#1E293B;padding:2px 8px;border-radius:10px}
+.tb-title{font-size:14px;font-weight:700;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-role{font-size:11px;color:var(--muted);background:var(--panel);padding:2px 8px;border-radius:10px}
 .timer{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--warning);min-width:60px;text-align:center}
 .timer.critical{color:var(--danger);animation:blink 1s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
 .status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0}
-.status-dot.live{background:var(--success);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 6px rgba(16,185,129,0)}}
+.status-dot.live{background:var(--success);animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 6px rgba(16,185,129,0)}}
 .tb-right{display:flex;align-items:center;gap:8px}
+
+/* LEFT: Monitoring panel */
 .left-panel{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-.cam-wrap{position:relative;background:#000;aspect-ratio:4/3;flex-shrink:0;max-height:240px}
-.cam-wrap video{width:100%;height:100%;object-fit:cover;display:block}
-.cam-status-bar{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);padding:4px 10px;font-size:10px;display:flex;align-items:center;gap:6px}
-.flags-section{flex:1;overflow-y:auto;padding:12px}
-.flags-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
-.flag-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:6px;font-size:12px}
-.flag-warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#FCD34D}
-.flag-danger{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#FCA5A5}
-.flag-info{background:rgba(79,70,229,.12);border:1px solid rgba(79,70,229,.3);color:#A5B4FC}
-.flag-icon{font-size:13px;flex-shrink:0;margin-top:1px}
+.monitor-hdr{padding:10px 14px 8px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.rp-sec{padding:10px 14px;border-bottom:1px solid var(--border)}
+.rp-title{font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:7px;font-weight:700}
+.rp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;font-size:12px}
+.rp-val{font-weight:700;font-size:12px}
+.flags-section{flex:1;overflow-y:auto;padding:10px 14px}
+.flags-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.flag-item{display:flex;align-items:flex-start;gap:7px;padding:7px 9px;border-radius:7px;margin-bottom:5px;font-size:11.5px;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+.flag-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#FCD34D}
+.flag-danger{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#FCA5A5}
+.flag-info{background:rgba(79,70,229,.1);border:1px solid rgba(79,70,229,.3);color:#A5B4FC}
+.flag-icon{font-size:12px;flex-shrink:0;margin-top:1px}
 .flag-text{flex:1;line-height:1.4}
-.flag-time{font-size:9px;color:var(--muted);margin-top:3px}
-.flags-empty{text-align:center;padding:20px 10px;color:var(--muted);font-size:12px}
-.chat-panel{display:flex;flex-direction:column;background:var(--bg)}
-.chat-header{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--panel)}
+.flag-time{font-size:9px;color:var(--muted);margin-top:2px;display:block}
+.flags-empty{text-align:center;padding:18px 10px;color:var(--muted);font-size:12px}
+
+/* CENTER: Video stage */
+.stage-panel{background:var(--stage);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.stage-video-wrap{flex:1;position:relative;background:#000;overflow:hidden}
+.stage-video-wrap video{width:100%;height:100%;object-fit:cover;display:block}
+.stage-gradient{position:absolute;bottom:0;left:0;right:0;height:90px;background:linear-gradient(transparent,rgba(0,0,0,.75));pointer-events:none}
+.stage-name-tag{position:absolute;bottom:14px;left:16px;display:flex;align-items:center;gap:8px}
+.stage-live-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulse-dot 1.5s infinite;flex-shrink:0;display:none}
+.stage-name-txt{font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+
+/* RIGHT: Chat sidebar */
+.chat-panel{background:var(--panel2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.chat-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;background:var(--panel);flex-shrink:0}
 .chat-title{font-size:13px;font-weight:600}
-.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-.msg{max-width:82%;display:flex;flex-direction:column;gap:3px}
+.chat-messages{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:86%;display:flex;flex-direction:column;gap:3px}
 .msg.ai{align-self:flex-start}
 .msg.candidate,.msg.interviewer{align-self:flex-end}
-.msg-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:0 4px}
-.msg-bubble{padding:10px 14px;border-radius:12px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.msg-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:0 3px}
+.msg-bubble{padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .msg.ai .msg-bubble{background:#1E293B;border:1px solid #334155;border-radius:4px 12px 12px 12px}
 .msg.candidate .msg-bubble{background:var(--primary);color:#fff;border-radius:12px 4px 12px 12px}
 .msg.interviewer .msg-bubble{background:#7C3AED;color:#fff;border-radius:12px 4px 12px 12px}
-.msg-code{background:#0D1117;border:1px solid #30363D;border-radius:8px;padding:10px;margin-top:4px;font-family:'Courier New',monospace;font-size:11.5px;color:#E6EDF3;overflow-x:auto;white-space:pre}
-.coding-hint{font-size:11px;color:var(--warning);padding:4px 2px;display:flex;align-items:center;gap:5px}
-.typing{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1E293B;border:1px solid #334155;border-radius:12px;align-self:flex-start;max-width:100px}
-.typing span{width:7px;height:7px;background:var(--muted);border-radius:50%;animation:bounce .8s infinite}
+.msg-code{background:#0D1117;border:1px solid #30363D;border-radius:8px;padding:9px;margin-top:3px;font-family:'Courier New',monospace;font-size:11.5px;color:#E6EDF3;overflow-x:auto;white-space:pre}
+.coding-hint{font-size:11px;color:var(--warning);padding:3px 2px;display:flex;align-items:center;gap:5px}
+.typing{display:flex;align-items:center;gap:7px;padding:9px 12px;background:#1E293B;border:1px solid #334155;border-radius:12px;align-self:flex-start;max-width:90px}
+.typing span{width:6px;height:6px;background:var(--muted);border-radius:50%;animation:bounce .8s infinite}
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-.paused-banner{background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);border-radius:10px;padding:10px 14px;font-size:12px;color:#C4B5FD;display:flex;align-items:center;gap:8px;margin:0 16px 8px}
-.input-area{border-top:1px solid var(--border);background:var(--panel);padding:10px 12px}
+.paused-banner{background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);border-radius:8px;padding:9px 12px;font-size:11.5px;color:#C4B5FD;display:flex;align-items:center;gap:7px;margin:0 10px 6px;flex-shrink:0}
+.input-area{border-top:1px solid var(--border);background:var(--panel);padding:10px 12px;flex-shrink:0}
 .code-editor-wrap{display:none;margin-bottom:8px}
 .code-editor-wrap.show{display:block}
-.code-editor-top{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);padding:6px 10px;background:#0D1117;border:1px solid #30363D;border-radius:8px 8px 0 0}
-.code-lang{background:#161B22;border:1px solid #30363D;color:var(--text);font-size:11px;padding:2px 6px;border-radius:4px}
-textarea.code-input{width:100%;height:110px;background:#0D1117;border:1px solid #30363D;border-top:none;border-radius:0 0 8px 8px;color:#E6EDF3;font-family:'Courier New',monospace;font-size:12px;padding:8px 10px;resize:none;outline:none;display:block}
-textarea.code-input:focus{border-color:#4F46E5;outline:none}
-.text-row{display:flex;align-items:flex-end;gap:8px}
-textarea.text-input{flex:1;background:#0D1117;border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13.5px;padding:10px 13px;resize:none;max-height:100px;min-height:42px;outline:none;font-family:inherit}
-textarea.text-input:focus{border-color:var(--primary)}
-.send-btn{width:42px;height:42px;border-radius:10px;background:var(--primary);border:none;color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.2s}
-.send-btn:hover{background:#3730A3}
-.send-btn:disabled{opacity:.4;cursor:not-allowed}
-.mic-btn{width:42px;height:42px;border-radius:10px;background:#1E293B;border:1.5px solid var(--border);color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.2s}
-.mic-btn.on{background:rgba(239,68,68,.2);border-color:var(--danger);color:var(--danger)}
+.code-editor-top{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);padding:5px 9px;background:#0D1117;border:1px solid #30363D;border-radius:8px 8px 0 0}
+.code-lang{background:#161B22;border:1px solid #30363D;color:var(--text);font-size:11px;padding:2px 5px;border-radius:4px}
+textarea.code-input{width:100%;height:100px;background:#0D1117;border:1px solid #30363D;border-top:none;border-radius:0 0 8px 8px;color:#E6EDF3;font-family:'Courier New',monospace;font-size:12px;padding:7px 9px;resize:none;outline:none;display:block}
+textarea.code-input:focus{border-color:var(--primary)}
 .input-tools{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
 .tool-btn{background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;padding:4px 8px;border-radius:6px;display:flex;align-items:center;gap:4px;transition:.15s}
 .tool-btn:hover{background:rgba(255,255,255,.07);color:var(--text)}
 .tool-btn.act{color:var(--warning);background:rgba(245,158,11,.1)}
-.right-panel{background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
-.rp-sec{padding:12px 14px;border-bottom:1px solid var(--border)}
-.rp-title{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px}
-.rp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;font-size:12.5px}
-.rp-val{font-weight:700}
+.text-row{display:flex;align-items:flex-end;gap:7px}
+textarea.text-input{flex:1;background:#0D1117;border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;padding:9px 12px;resize:none;max-height:100px;min-height:40px;outline:none;font-family:inherit}
+textarea.text-input:focus{border-color:var(--primary)}
+.send-btn{width:40px;height:40px;border-radius:10px;background:var(--primary);border:none;color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.2s}
+.send-btn:hover{background:#3730A3}
+.send-btn:disabled{opacity:.4;cursor:not-allowed}
+.mic-btn{width:40px;height:40px;border-radius:10px;background:#1E293B;border:1.5px solid var(--border);color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.2s}
+.mic-btn.on{background:rgba(239,68,68,.2);border-color:var(--danger);color:var(--danger)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.2s;text-decoration:none}
+.btn-p{background:var(--primary);color:#fff;width:100%;justify-content:center}
+.btn-p:hover{background:#3730A3}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:7px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.rec-badge{background:rgba(239,68,68,.2);color:#FCA5A5;border:1px solid rgba(239,68,68,.4)}
+.start-ov{display:flex;position:fixed;inset:0;background:rgba(15,23,42,.97);z-index:200;align-items:center;justify-content:center}
+.start-card{background:#1E293B;border:1px solid var(--border);border-radius:20px;padding:32px;max-width:460px;width:95%;text-align:center}
+.preview-cam{background:#000;border-radius:12px;overflow:hidden;margin-bottom:14px;aspect-ratio:16/9}
+.preview-cam video{width:100%;height:100%;object-fit:cover}
+.checklist{text-align:left;background:#0F172A;border-radius:10px;padding:12px 14px;margin-bottom:18px}
+.chk-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
 .complete-ov{display:none;position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:200;align-items:center;justify-content:center}
 .complete-ov.show{display:flex}
 .complete-card{background:#1E293B;border:1px solid var(--border);border-radius:20px;padding:36px;max-width:460px;width:95%;text-align:center}
@@ -91,20 +122,6 @@ textarea.text-input:focus{border-color:var(--primary)}
 .score-box{background:#0F172A;border-radius:10px;padding:14px;border-top:3px solid var(--primary)}
 .score-val{font-size:24px;font-weight:900}
 .score-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px}
-.start-ov{display:flex;position:fixed;inset:0;background:rgba(15,23,42,.97);z-index:200;align-items:center;justify-content:center}
-.start-card{background:#1E293B;border:1px solid var(--border);border-radius:20px;padding:32px;max-width:460px;width:95%;text-align:center}
-.preview-cam{background:#000;border-radius:12px;overflow:hidden;margin-bottom:14px;aspect-ratio:16/9}
-.preview-cam video{width:100%;height:100%;object-fit:cover}
-.checklist{text-align:left;background:#0F172A;border-radius:10px;padding:12px 14px;margin-bottom:18px}
-.chk-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.2s;text-decoration:none}
-.btn-p{background:var(--primary);color:#fff;width:100%;justify-content:center}
-.btn-p:hover{background:#3730A3}
-.btn-danger{background:var(--danger);color:#fff}
-.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
-.btn-sm{padding:6px 12px;font-size:12px;border-radius:7px}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
-.rec-badge{background:rgba(239,68,68,.2);color:#FCA5A5;border:1px solid rgba(239,68,68,.4)}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
@@ -113,9 +130,10 @@ textarea.text-input:focus{border-color:var(--primary)}
 </head>
 <body>
 
+<!-- Start overlay -->
 <div id="startOv" class="start-ov">
   <div class="start-card">
-    <div style="font-size:48px;margin-bottom:10px">🎯</div>
+    <div style="font-size:48px;margin-bottom:10px">&#127919;</div>
     <div style="font-size:18px;font-weight:800;margin-bottom:6px" id="startTitle">Loading Interview...</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="startSub">Setting up environment</div>
     <div class="preview-cam"><video id="previewVid" autoplay muted playsinline></video></div>
@@ -126,9 +144,10 @@ textarea.text-input:focus{border-color:var(--primary)}
   </div>
 </div>
 
+<!-- Complete overlay -->
 <div class="complete-ov" id="completeOv">
   <div class="complete-card">
-    <div class="complete-icon" id="cIcon">🏆</div>
+    <div class="complete-icon" id="cIcon">&#127942;</div>
     <div class="complete-title" id="cTitle">Interview Complete!</div>
     <div class="complete-sub" id="cSub">Uploading recording and calculating scores...</div>
     <div class="score-grid" id="scoreGrid"></div>
@@ -139,7 +158,10 @@ textarea.text-input:focus{border-color:var(--primary)}
   </div>
 </div>
 
+<!-- Main interview room -->
 <div class="room" id="mainRoom" style="display:none">
+
+  <!-- Topbar -->
   <header class="topbar">
     <div class="tb-left">
       <div class="status-dot" id="statusDot"></div>
@@ -149,40 +171,90 @@ textarea.text-input:focus{border-color:var(--primary)}
     <div class="timer" id="timerEl">00:00</div>
     <div class="tb-right">
       <span class="badge rec-badge" id="recBadge" style="display:none"><i class="fas fa-circle"></i> REC</span>
-      <button class="btn btn-outline btn-sm" id="muteBtn" onclick="toggleMute()"><i class="fas fa-microphone"></i></button>
-      <button class="btn btn-outline btn-sm" id="camBtn" onclick="toggleCam()"><i class="fas fa-video"></i></button>
-      <button class="btn btn-danger btn-sm" onclick="endInterview()"><i class="fas fa-stop"></i> End</button>
+      <button class="btn btn-outline btn-sm" id="muteBtn" onclick="toggleMute()" title="Mute / Unmute"><i class="fas fa-microphone"></i></button>
+      <button class="btn btn-outline btn-sm" id="camBtn" onclick="toggleCam()" title="Camera"><i class="fas fa-video"></i></button>
+      <button class="btn btn-danger btn-sm" onclick="endInterview()"><i class="fas fa-phone-slash"></i> End</button>
     </div>
   </header>
 
+  <!-- LEFT: Monitoring panel -->
   <div class="left-panel">
-    <div class="cam-wrap">
-      <video id="camFeed" autoplay muted playsinline></video>
-      <div class="cam-status-bar">
-        <span style="width:7px;height:7px;background:var(--success);border-radius:50%"></span>
-        <span id="camTxt" style="font-size:10px">Live</span>
+    <div class="monitor-hdr">
+      <i class="fas fa-shield-halved" style="color:var(--warning)"></i>
+      Monitoring
+    </div>
+
+    <div class="rp-sec">
+      <div class="rp-title">Session</div>
+      <div class="rp-row"><span>AI Questions</span><span class="rp-val" id="rpQ">0</span></div>
+      <div class="rp-row"><span>Your Replies</span><span class="rp-val" id="rpR">0</span></div>
+      <div class="rp-row"><span>Tab Switches</span><span class="rp-val" id="rpT" style="color:var(--warning)">0</span></div>
+    </div>
+
+    <div class="rp-sec">
+      <div class="rp-title">Integrity</div>
+      <div class="rp-row"><span>Away from cam</span><span class="rp-val" id="rpA" style="color:var(--danger)">0</span></div>
+      <div class="rp-row"><span>Multiple faces</span><span class="rp-val" id="rpM" style="color:var(--danger)">0</span></div>
+      <div class="rp-row"><span>Tab switches</span><span class="rp-val" id="rpTS" style="color:var(--warning)">0</span></div>
+    </div>
+
+    <div class="rp-sec">
+      <div class="rp-title">Vision</div>
+      <div class="rp-row"><span>Faces</span><span class="rp-val" id="rpF">1</span></div>
+      <div class="rp-row"><span>Gaze</span><span class="rp-val" id="rpG" style="color:var(--success)">OK</span></div>
+      <div class="rp-row"><span>Emotion</span><span class="rp-val" id="rpE">&#8211;</span></div>
+    </div>
+
+    <div class="rp-sec" style="border-bottom:none">
+      <div class="rp-title">Tips</div>
+      <div style="font-size:11.5px;color:var(--muted);line-height:2">
+        Keep face visible &amp; centred<br>
+        Speak clearly &mdash; Indian accent supported<br>
+        Use code editor for coding questions<br>
+        Do not switch browser tabs<br>
+        Think aloud for better scoring
       </div>
     </div>
+
     <div class="flags-section">
       <div class="flags-title">
-        <span><i class="fas fa-shield-halved"></i> Alerts</span>
+        <span><i class="fas fa-triangle-exclamation"></i> Alerts</span>
         <span id="flagCount" style="background:#334155;padding:1px 7px;border-radius:10px;font-size:9px">0</span>
       </div>
       <div id="flagsList">
-        <div class="flags-empty"><i class="fas fa-check-circle" style="font-size:24px;display:block;margin-bottom:8px;color:var(--success)"></i>No alerts yet.<br>Stay focused and on-screen!</div>
+        <div class="flags-empty">
+          <i class="fas fa-check-circle" style="font-size:22px;display:block;margin-bottom:7px;color:var(--success)"></i>
+          No alerts &mdash; stay focused!
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="chat-panel" style="overflow-y: auto;">
+  <!-- CENTER: Video stage (Teams-style) -->
+  <div class="stage-panel">
+    <div class="stage-video-wrap" id="stageWrap">
+      <video id="camFeed" autoplay muted playsinline></video>
+      <div class="stage-gradient"></div>
+      <div class="stage-name-tag">
+        <div class="stage-live-dot" id="stageLiveDot"></div>
+        <span class="stage-name-txt" id="camTxt">Connecting camera&hellip;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Chat sidebar -->
+  <div class="chat-panel">
     <div class="chat-header">
       <i class="fas fa-robot" style="color:var(--primary)"></i>
       <div class="chat-title">AI Interviewer</div>
     </div>
+
     <div class="chat-messages" id="chatMsgs"></div>
+
     <div id="pausedBanner" style="display:none" class="paused-banner">
-      <i class="fas fa-pause-circle"></i> Interviewer has taken over — wait for their question
+      <i class="fas fa-pause-circle"></i> Interviewer has taken over
     </div>
+
     <div class="input-area">
       <div class="input-tools">
         <button class="tool-btn" id="codeBtn" onclick="toggleCode()"><i class="fas fa-code"></i> Code Editor</button>
@@ -193,50 +265,23 @@ textarea.text-input:focus{border-color:var(--primary)}
         <div class="code-editor-top">
           <span><i class="fas fa-code"></i> Code</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <select class="code-lang" id="langSel"><option>python</option><option>javascript</option><option>java</option><option>cpp</option><option>go</option><option>sql</option></select>
+            <select class="code-lang" id="langSel">
+              <option>python</option><option>javascript</option><option>java</option>
+              <option>cpp</option><option>go</option><option>sql</option>
+            </select>
             <button class="tool-btn" onclick="document.getElementById('codeArea').value=''" style="font-size:10px;padding:2px 6px"><i class="fas fa-trash"></i></button>
           </div>
         </div>
         <textarea class="code-input" id="codeArea" placeholder="// Write your solution here..."></textarea>
       </div>
       <div class="text-row">
-        <textarea class="text-input" id="textArea" placeholder="Type your answer or use voice input..." rows="1" onkeydown="onKey(event)" oninput="resize(this)"></textarea>
+        <textarea class="text-input" id="textArea" placeholder="Type your answer or speak..." rows="1" onkeydown="onKey(event)" oninput="resize(this)"></textarea>
         <button class="mic-btn" id="micBtn" onclick="toggleListen()" title="Voice input"><i class="fas fa-microphone"></i></button>
         <button class="send-btn" id="sendBtn" onclick="doSend()"><i class="fas fa-paper-plane"></i></button>
       </div>
     </div>
   </div>
 
-  <div class="right-panel">
-    <div class="rp-sec">
-      <div class="rp-title">Session Stats</div>
-      <div class="rp-row"><span>AI Questions</span><span class="rp-val" id="rpQ">0</span></div>
-      <div class="rp-row"><span>Your Replies</span><span class="rp-val" id="rpR">0</span></div>
-      <div class="rp-row"><span>Tab Switches</span><span class="rp-val" id="rpT" style="color:var(--warning)">0</span></div>
-    </div>
-    <!-- <div class="rp-sec">
-      <div class="rp-title">Integrity Alerts</div>
-      <div class="rp-row"><span>Away from camera</span><span class="rp-val" id="rpA" style="color:var(--danger)">0</span></div>
-      <div class="rp-row"><span>Multiple faces</span><span class="rp-val" id="rpM" style="color:var(--danger)">0</span></div>
-      <div class="rp-row"><span>Tab switches</span><span class="rp-val" id="rpTS" style="color:var(--warning)">0</span></div>
-    </div>
-    <div class="rp-sec">
-      <div class="rp-title">Vision (internal)</div>
-      <div class="rp-row"><span>Faces</span><span class="rp-val" id="rpF">1</span></div>
-      <div class="rp-row"><span>Gaze</span><span class="rp-val" id="rpG" style="color:var(--success)">OK</span></div>
-      <div class="rp-row"><span>Emotion</span><span class="rp-val" id="rpE">–</span></div>
-    </div> -->
-    <div style="padding:14px">
-      <div class="rp-title">Tips</div>
-      <div style="font-size:12px;color:var(--muted);line-height:2">
-        👁 Keep face visible<br>
-        🎤 Speak clearly<br>
-        💻 Use code editor for coding Qs<br>
-        🚫 Do not switch tabs<br>
-        💡 Think aloud
-      </div>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -247,7 +292,9 @@ let camStream=null, recorder=null, chunks=[];
 let muted=false, camOff=false;
 let timerIv=null, elapsed=0;
 let codeOpen=false, voiceOn=true, listening=false;
-let recog=null, finalText='';
+// Whisper STT state (replaces browser SpeechRecognition)
+let whisperRecorder=null, whisperStream=null, whisperSilenceTimer=null;
+let whisperChunks=[], isRecording=false;
 let tabSw=0, lookAway=0, multiFace=0;
 let visionIv=null;
 let vData={avg_confidence:65,avg_engagement:65,avg_stress:20,cheating_flags:[],frames_analyzed:0,tab_switches:0,avg_cheating:0};
@@ -294,9 +341,10 @@ async function setupCam(){
 }
 
 function doChecks(){
+  const sttOk=!!(camStream&&window.MediaRecorder);
   const checks=[
     {icon:'fa-video',text:'Camera access',ok:!!camStream,col:camStream?'var(--success)':'var(--danger)'},
-    {icon:'fa-microphone',text:'Microphone',ok:!!camStream,col:camStream?'var(--success)':'var(--danger)'},
+    {icon:'fa-microphone',text:'Microphone (Whisper STT)',ok:sttOk,col:sttOk?'var(--success)':'var(--danger)'},
     {icon:'fa-wifi',text:'Connection',ok:true,col:'var(--success)'},
     {icon:'fa-eye',text:'Monitoring enabled',ok:true,col:'var(--warning)'},
   ];
@@ -311,24 +359,22 @@ function doChecks(){
 async function beginInterview(){
   const btn=document.getElementById('startBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Starting...';
-  // Pre-load TTS voices (requires user gesture — this button click is it)
-  if(window.speechSynthesis){
-    window.speechSynthesis.getVoices();
-    // Warm up with a silent utterance to unlock audio on some browsers
-    const warmup=new SpeechSynthesisUtterance(' ');warmup.volume=0;
-    window.speechSynthesis.speak(warmup);
-  }
+  // Pre-load TTS voices (requires user gesture)
+  if(window.speechSynthesis){window.speechSynthesis.getVoices();}
   try{
     await startRec();
     const res=await api('POST','/interview-session/start/'+TOKEN);
     document.getElementById('startOv').style.display='none';
     document.getElementById('mainRoom').style.display='grid';
     document.getElementById('statusDot').classList.add('live');
+    document.getElementById('camTxt').textContent='You — Live';
+    const sld=document.getElementById('stageLiveDot');if(sld)sld.style.display='block';
     document.getElementById('tbTitle').textContent=iv.title;
     document.getElementById('tbRole').textContent=iv.job_role;
     elapsed=0;timerIv=setInterval(tick,1000);
     setupTabWatch();
     startVision();
+    startRTC();  // WebRTC: start broadcasting to watchers
     if(res&&res.messages)res.messages.forEach(m=>addMsg(m));
     if(res&&res.ai_paused)setAIPaused(true);
   }catch(e){
@@ -460,38 +506,131 @@ function speak(text){
 }
 function stopSpeaking(){if(window.speechSynthesis)window.speechSynthesis.cancel();}
 
+/* ── Whisper STT — records audio in chunks, sends to /api/v1/stt/transcribe ── */
 function initSpeech(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){document.getElementById('sttStat').textContent='(STT unavailable — type only)';voiceOn=false;return;}
-  recog=new SR();
-  recog.continuous=true;recog.interimResults=true;recog.lang='en-IN';recog.maxAlternatives=3;
-  recog.onresult=e=>{
-    clearTimeout(window._silenceTimer);
-    let interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal)finalText+=e.results[i][0].transcript+' ';
-      else interim=e.results[i][0].transcript;
-    }
-    const t=document.getElementById('textArea');t.value=finalText+interim;resize(t);
-    // Auto-send after 4 seconds of silence
-    const hasContent=(finalText+interim).trim();
-    if(hasContent){
-      window._silenceTimer=setTimeout(()=>{
-        if(listening&&document.getElementById('textArea').value.trim()){
-          stopL();
-          doSend();
-        }
-      },4000);
-    }
-  };
-  recog.onstart=()=>{document.getElementById('micBtn').classList.add('on');document.getElementById('sttStat').textContent='Listening… auto-sends after 4s silence';finalText=document.getElementById('textArea').value;};
-  recog.onend=()=>{listening=false;clearTimeout(window._silenceTimer);document.getElementById('micBtn').classList.remove('on');document.getElementById('sttStat').textContent='';};
-  recog.onerror=e=>{if(e.error==='not-allowed')document.getElementById('sttStat').textContent='Mic denied';listening=false;};
+  if(!navigator.mediaDevices||!window.MediaRecorder){
+    document.getElementById('sttStat').textContent='(Mic unavailable — type only)';
+    voiceOn=false;
+    return;
+  }
+  document.getElementById('sttStat').textContent='Whisper STT ready';
+  // whisperStream is set from camStream after setupCam()
 }
-function toggleVoiceMode(){voiceOn=!voiceOn;document.getElementById('voiceBtn').classList.toggle('act',voiceOn);if(!voiceOn&&listening){try{recog.stop();}catch(_){}}}
-function toggleListen(){if(!voiceOn||!recog)return;listening?stopL():startL();}
-function startL(){if(listening||!recog)return;stopSpeaking();finalText=document.getElementById('textArea').value;try{recog.start();listening=true;}catch(_){try{recog.stop();setTimeout(()=>{try{recog.start();}catch(_){}},300);}catch(_){};}}
-function stopL(){clearTimeout(window._silenceTimer);if(!recog)return;try{recog.stop();}catch(_){}listening=false;}
+
+function toggleVoiceMode(){
+  voiceOn=!voiceOn;
+  document.getElementById('voiceBtn').classList.toggle('act',voiceOn);
+  if(!voiceOn&&isRecording)stopL();
+}
+
+function toggleListen(){
+  if(!voiceOn)return;
+  isRecording?stopL():startL();
+}
+
+function startL(){
+  if(isRecording||!camStream)return;
+  stopSpeaking();
+  try{
+    // Use only audio track from camStream
+    const audioOnly=new MediaStream(camStream.getAudioTracks());
+    whisperRecorder=new MediaRecorder(audioOnly,{mimeType:'audio/webm;codecs=opus'});
+    whisperChunks=[];
+    whisperRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)whisperChunks.push(e.data);};
+    whisperRecorder.onstop=()=>_sendToWhisper();
+    // Collect audio in 200ms chunks so we can detect silence boundaries
+    whisperRecorder.start(200);
+    isRecording=true;listening=true;
+    document.getElementById('micBtn').classList.add('on');
+    document.getElementById('sttStat').textContent='Listening… (Whisper) — stops after 4s silence';
+    // Voice activity detection via AudioContext
+    _startVAD(audioOnly);
+  }catch(e){
+    document.getElementById('sttStat').textContent='Mic error: '+e.message;
+  }
+}
+
+function stopL(){
+  clearTimeout(whisperSilenceTimer);
+  if(whisperRecorder&&whisperRecorder.state!=='inactive'){
+    try{whisperRecorder.stop();}catch(_){}
+  }
+  isRecording=false;listening=false;
+  document.getElementById('micBtn').classList.remove('on');
+  document.getElementById('sttStat').textContent='';
+}
+
+let _vadCtx=null,_vadSource=null;
+function _startVAD(stream){
+  try{
+    _vadCtx=new AudioContext();
+    _vadSource=_vadCtx.createMediaStreamSource(stream);
+    const analyser=_vadCtx.createAnalyser();
+    analyser.fftSize=512;
+    _vadSource.connect(analyser);
+    const buf=new Uint8Array(analyser.frequencyBinCount);
+    let silentMs=0;
+    const SILENCE_THRESH=10; // RMS threshold for silence
+    const SILENCE_SEND_MS=4000; // auto-send after 4s silence
+    const CHECK_MS=200;
+    function check(){
+      if(!isRecording)return;
+      analyser.getByteFrequencyData(buf);
+      const rms=Math.sqrt(buf.reduce((a,b)=>a+b*b,0)/buf.length);
+      if(rms<SILENCE_THRESH){
+        silentMs+=CHECK_MS;
+        if(silentMs>=SILENCE_SEND_MS&&whisperChunks.length>0){
+          // 4s of silence — stop, transcribe, send
+          stopL();
+          return;
+        }
+      }else{
+        silentMs=0; // voice detected — reset silence counter
+      }
+      setTimeout(check,CHECK_MS);
+    }
+    setTimeout(check,CHECK_MS);
+  }catch(e){console.warn('VAD error:',e);}
+}
+
+async function _sendToWhisper(){
+  if(!whisperChunks.length)return;
+  const blob=new Blob(whisperChunks,{type:'audio/webm'});
+  whisperChunks=[];
+  if(blob.size<1000)return; // skip tiny blobs (background noise)
+
+  document.getElementById('sttStat').textContent='Transcribing…';
+  try{
+    const fd=new FormData();
+    fd.append('audio',blob,'audio.webm');
+    fd.append('language','en');
+    const t=localStorage.getItem('token');
+    const res=await fetch(API+'/stt/transcribe',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+t},
+      credentials:'include',
+      body:fd,
+    });
+    const data=await res.json();
+    if(data.text&&data.text.trim()){
+      const ta=document.getElementById('textArea');
+      ta.value=(ta.value+' '+data.text).trim();
+      resize(ta);
+      document.getElementById('sttStat').textContent='✓ Transcribed — sending…';
+      // Auto-send after transcription
+      setTimeout(()=>{
+        if(document.getElementById('textArea').value.trim())doSend();
+        document.getElementById('sttStat').textContent='';
+      },400);
+    }else{
+      document.getElementById('sttStat').textContent='(no speech detected)';
+      setTimeout(()=>{document.getElementById('sttStat').textContent='';},2000);
+    }
+  }catch(e){
+    document.getElementById('sttStat').textContent='STT error: '+e.message;
+    setTimeout(()=>{document.getElementById('sttStat').textContent='';},3000);
+  }
+}
 
 function toggleCode(){
   codeOpen=!codeOpen;
@@ -557,6 +696,58 @@ function toggleCam(){camOff=!camOff;if(camStream)camStream.getVideoTracks().forE
 
 function endInterview(){if(!confirm('End interview and submit?'))return;doFinish();}
 
+/* ── WebRTC: broadcast candidate cam+audio to HR/Interviewer watchers ── */
+let rtcPeer=null, rtcWs=null;
+const RTC_CONFIG={iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+]};
+
+function startRTC(){
+  if(!camStream)return;
+  try{
+    const wsProto=location.protocol==='https:'?'wss':'ws';
+    const jwtToken=localStorage.getItem('token')||'';
+    rtcWs=new WebSocket(`${wsProto}://${location.host}/ws/rtc/${TOKEN}?role=candidate&token=${jwtToken}`);
+    rtcPeer=new RTCPeerConnection(RTC_CONFIG);
+
+    // Add all cam tracks (video + audio) to peer connection
+    camStream.getTracks().forEach(t=>rtcPeer.addTrack(t,camStream));
+
+    // ICE candidates → signaling server
+    rtcPeer.onicecandidate=e=>{
+      if(e.candidate&&rtcWs.readyState===1){
+        rtcWs.send(JSON.stringify({type:'ice',candidate:e.candidate}));
+      }
+    };
+
+    rtcWs.onopen=()=>{
+      // Create and send offer when connection is ready
+      rtcPeer.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false})
+        .then(offer=>rtcPeer.setLocalDescription(offer))
+        .then(()=>rtcWs.send(JSON.stringify({type:'offer',sdp:rtcPeer.localDescription})))
+        .catch(e=>console.warn('RTC offer error:',e));
+    };
+
+    rtcWs.onmessage=async e=>{
+      const msg=JSON.parse(e.data);
+      if(msg.type==='answer'){
+        await rtcPeer.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      }else if(msg.type==='ice'&&msg.candidate){
+        await rtcPeer.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(()=>{});
+      }else if(msg.type==='request_offer'){
+        // New watcher joined — re-offer
+        rtcPeer.createOffer()
+          .then(o=>rtcPeer.setLocalDescription(o))
+          .then(()=>rtcWs.send(JSON.stringify({type:'offer',sdp:rtcPeer.localDescription})))
+          .catch(()=>{});
+      }
+    };
+
+    rtcWs.onerror=e=>console.warn('RTC WS error:',e);
+  }catch(e){console.warn('WebRTC init failed (non-critical):',e);}
+}
+
 async function doFinish(){
   clearInterval(timerIv);clearInterval(visionIv);
   stopSpeaking();
@@ -576,6 +767,8 @@ async function doFinish(){
     document.getElementById('scoreGrid').innerHTML=sc.map(([l,v,c])=>'<div class="score-box" style="border-top-color:'+c+'"><div class="score-val" style="color:'+c+'">'+parseFloat(v).toFixed(1)+'%</div><div class="score-lbl">'+l+'</div></div>').join('');
   }catch(e){document.getElementById('cSub').textContent='Finished. Contact HR for results.';}
   if(camStream)camStream.getTracks().forEach(t=>t.stop());
+  if(rtcPeer){try{rtcPeer.close();}catch(_){}}
+  if(rtcWs&&rtcWs.readyState<2){try{rtcWs.close();}catch(_){}}
 }
 </script>
 </body>
