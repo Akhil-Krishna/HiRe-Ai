@@ -1,8 +1,9 @@
 import io
 import logging
 import asyncio
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,9 @@ _stt_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="stt-worker
 # ── Model singleton ────────────────────────────────────────────────────────────
 _model = None
 _model_lock = asyncio.Lock()
+
+def _stt_model_name() -> str:
+    return os.getenv("STT_MODEL", "base")
 
 
 def _load_model_sync(size: str, device: str, compute: str):
@@ -35,7 +39,6 @@ async def warmup_model():
     if _model is not None:
         return
 
-    import os
     size    = os.getenv("STT_MODEL",   "base")
     device  = os.getenv("STT_DEVICE",  "cpu")
     compute = os.getenv("STT_COMPUTE", "int8")
@@ -74,6 +77,7 @@ def _transcribe_sync(model, audio_bytes: bytes, language: str) -> tuple:
     Pure synchronous transcription — runs inside _stt_executor.
     Returns (text, detected_language, duration_seconds).
     """
+    started = time.perf_counter()
     audio_io = io.BytesIO(audio_bytes)
     segments, info = model.transcribe(
         audio_io,
@@ -85,7 +89,8 @@ def _transcribe_sync(model, audio_bytes: bytes, language: str) -> tuple:
     )
     # segments is a generator — must be consumed inside this thread
     text = " ".join(seg.text.strip() for seg in segments).strip()
-    return text, info.language, info.duration
+    infer_ms = (time.perf_counter() - started) * 1000.0
+    return text, info.language, info.duration, round(infer_ms, 1)
 
 
 async def transcribe_audio(audio_bytes: bytes, language: str = "en") -> dict:
@@ -93,29 +98,55 @@ async def transcribe_audio(audio_bytes: bytes, language: str = "en") -> dict:
     Transcribe raw audio bytes (webm / ogg / wav / mp4 — anything ffmpeg handles).
     Returns: {"text": str, "language": str, "duration": float, "available": bool}
     """
+    started = time.perf_counter()
+    model_name = _stt_model_name()
+
     if not audio_bytes:
-        return {"text": "", "language": language, "duration": 0.0, "available": False}
+        return {
+            "text": "",
+            "language": language,
+            "duration": 0.0,
+            "available": False,
+            "processing_ms": round((time.perf_counter() - started) * 1000.0, 1),
+            "model": model_name,
+        }
 
     model = await _get_model()
 
     if model == "unavailable" or model is None:
-        return {"text": "", "language": language, "duration": 0.0, "available": False}
+        return {
+            "text": "",
+            "language": language,
+            "duration": 0.0,
+            "available": False,
+            "processing_ms": round((time.perf_counter() - started) * 1000.0, 1),
+            "model": model_name,
+        }
 
     try:
         loop = asyncio.get_running_loop()
-        text, detected_lang, duration = await loop.run_in_executor(
+        text, detected_lang, duration, infer_ms = await loop.run_in_executor(
             _stt_executor,          # dedicated pool — not shared with vision
             _transcribe_sync, model, audio_bytes, language
+        )
+        total_ms = (time.perf_counter() - started) * 1000.0
+        logger.debug(
+            "STT transcribe bytes=%d lang=%s model=%s infer_ms=%.1f total_ms=%.1f",
+            len(audio_bytes), language, model_name, infer_ms, total_ms
         )
         return {
             "text": text,
             "language": detected_lang,
             "duration": round(duration, 2),
             "available": True,
+            "processing_ms": round(total_ms, 1),
+            "model": model_name,
         }
     except Exception as e:
         logger.error("Whisper transcription error: %s", e)
         return {
             "text": "", "language": language, "duration": 0.0,
             "available": False, "error": str(e),
+            "processing_ms": round((time.perf_counter() - started) * 1000.0, 1),
+            "model": model_name,
         }

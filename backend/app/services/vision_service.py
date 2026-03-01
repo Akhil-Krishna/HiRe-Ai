@@ -257,7 +257,7 @@ async def _analyze_deepface(b64_image: str) -> dict:
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
-async def analyze_frame(b64_image: str) -> dict:
+async def _analyze_frame_legacy(b64_image: str) -> dict:
     provider = settings.VISION_PROVIDER.lower().strip()
     if provider == "mock":
         return await _analyze_mock(b64_image)
@@ -269,6 +269,34 @@ async def analyze_frame(b64_image: str) -> dict:
 
 
 # ── Post-interview aggregation ─────────────────────────────────────────────────
+
+async def analyze_frame(b64_image: str) -> dict:
+    started = time.perf_counter()
+    configured_provider = settings.VISION_PROVIDER.lower().strip()
+    provider_used = configured_provider
+    degraded = False
+
+    if configured_provider == "mock":
+        result = await _analyze_mock(b64_image)
+        provider_used = "mock"
+    else:
+        result = await _analyze_deepface(b64_image)
+        provider_used = "deepface"
+        if not result["success"] and str(result.get("error", "")).startswith("Vision libs"):
+            logger.info("DeepFace unavailable - falling back to mock")
+            result = await _analyze_mock(b64_image)
+            provider_used = "mock"
+            degraded = True
+
+    result["provider"] = provider_used
+    result["degraded"] = degraded
+    result["processing_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
+    logger.debug(
+        "Vision analyze provider=%s degraded=%s processing_ms=%.1f success=%s",
+        provider_used, degraded, result["processing_ms"], result.get("success")
+    )
+    return result
+
 
 def aggregate_vision_logs(logs: list) -> dict:
     if not logs:

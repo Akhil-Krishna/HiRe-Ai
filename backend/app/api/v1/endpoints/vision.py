@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from pydantic import BaseModel
+import time
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -26,7 +27,12 @@ async def analyze_vision_frame(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    started = time.perf_counter()
     result = await analyze_frame(payload.frame)
+    if "processing_ms" not in result:
+        result["processing_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
+    result.setdefault("provider", "deepface")
+    result.setdefault("degraded", False)
 
     # Persist to DB if interview_id provided
     if payload.interview_id:
@@ -49,6 +55,14 @@ async def analyze_vision_frame(
             db.add(log)
             await db.flush()
 
+    logger.info(
+        "Vision analyze user=%s provider=%s degraded=%s processing_ms=%s face_count=%s",
+        current_user.id,
+        result.get("provider"),
+        result.get("degraded"),
+        result.get("processing_ms"),
+        result.get("face_count"),
+    )
     return result
 
 
