@@ -38,7 +38,12 @@ async def login(payload: LoginRequest, response: Response, db: AsyncSession = De
 
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Open registration — no auth required."""
+    """Open self-registration. Restricted to candidate role for safety."""
+    if payload.role != UserRole.CANDIDATE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration is allowed only for candidate accounts",
+        )
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Email already registered")

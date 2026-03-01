@@ -66,6 +66,14 @@ def _is_org_viewer(iv: Interview, user: User) -> bool:
     return False
 
 
+def _can_join_interview(iv: Interview, user: User) -> bool:
+    if user.role == UserRole.ADMIN:
+        return True
+    if user.role == UserRole.CANDIDATE:
+        return iv.candidate_id == user.id
+    return _is_org_viewer(iv, user)
+
+
 @router.get("/join/{interview_token}", response_model=InterviewWithInterviewers)
 async def join_interview(
     interview_token: str,
@@ -73,8 +81,8 @@ async def join_interview(
     current_user: User = Depends(get_current_user),
 ):
     iv = await _get_iv(interview_token, db)
-    if current_user.role == UserRole.CANDIDATE and iv.candidate_id != current_user.id:
-        raise HTTPException(403, "This interview is not assigned to you")
+    if not _can_join_interview(iv, current_user):
+        raise HTTPException(403, "Access denied")
     if iv.status == InterviewStatus.CANCELLED:
         raise HTTPException(400, "Interview cancelled")
     iv.has_recording = bool(iv.recording_url)

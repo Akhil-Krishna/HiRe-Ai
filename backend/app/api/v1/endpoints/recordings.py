@@ -42,8 +42,13 @@ async def _get_interview_by_token(token: str, db: AsyncSession) -> Interview:
 
 def _check_download_access(interview: Interview, user: User) -> None:
     """HR/Admin/assigned Interviewers/the Candidate can download."""
-    if user.role in (UserRole.ADMIN, UserRole.HR):
+    if user.role == UserRole.ADMIN:
         return
+    if user.role == UserRole.HR:
+        interview_org = interview.hr.organisation_id if interview.hr else None
+        if interview_org and user.organisation_id == interview_org:
+            return
+        raise HTTPException(status_code=403, detail="Access denied")
     if user.role == UserRole.CANDIDATE and interview.candidate_id == user.id:
         return
     if user.role == UserRole.INTERVIEWER:
@@ -146,7 +151,7 @@ async def download_recording(
         raise HTTPException(status_code=404, detail="Recording file not found on server")
 
     media_type = "video/webm" if rec_path.suffix.lower() == ".webm" else "video/mp4"
-    filename = f"interview_{interview_token[:8]}_{rec_path.suffix.lstrip('.')}.{rec_path.suffix.lstrip('.')}"
+    filename = f"interview_{interview_token[:8]}{rec_path.suffix.lower()}"
 
     return FileResponse(
         path=str(rec_path),
@@ -169,6 +174,10 @@ async def delete_recording(
         raise HTTPException(status_code=403, detail="Only HR or Admin can delete recordings")
 
     interview = await _get_interview_by_token(interview_token, db)
+    if current_user.role == UserRole.HR:
+        interview_org = interview.hr.organisation_id if interview.hr else None
+        if not interview_org or interview_org != current_user.organisation_id:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     if interview.recording_url:
         try:

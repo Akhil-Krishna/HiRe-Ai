@@ -25,7 +25,8 @@ async def lifespan(app: FastAPI):
     Path("recordings").mkdir(parents=True, exist_ok=True)
     Path("uploads/resumes").mkdir(parents=True, exist_ok=True)
     await init_db()
-    await create_default_data()
+    if settings.DEBUG:
+        await create_default_data()
 
     # Pre-load Whisper STT model so the first candidate request is instant.
     # Model loads in a background thread; server is ready immediately.
@@ -85,10 +86,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_origins = ["*"] if settings.DEBUG else [settings.FRONTEND_URL]
+cors_allow_credentials = False if "*" in cors_origins else True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.DEBUG else [settings.FRONTEND_URL],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

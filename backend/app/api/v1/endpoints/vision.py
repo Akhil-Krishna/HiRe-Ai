@@ -6,8 +6,8 @@ from pydantic import BaseModel
 import time
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.user import User
-from app.models.interview import Interview, VisionLog
+from app.models.user import User, UserRole
+from app.models.interview import Interview, VisionLog, InterviewInterviewer
 from app.services.vision_service import analyze_frame, aggregate_vision_logs
 import logging
 
@@ -72,6 +72,31 @@ async def get_vision_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    iv_res = await db.execute(
+        select(Interview).where(Interview.id == interview_id)
+    )
+    iv = iv_res.scalar_one_or_none()
+    if not iv:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if current_user.role != UserRole.ADMIN:
+        if current_user.role == UserRole.CANDIDATE and iv.candidate_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.HR:
+            if iv.organisation_id and iv.organisation_id != current_user.organisation_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.INTERVIEWER:
+            ares = await db.execute(
+                select(InterviewInterviewer.id).where(
+                    InterviewInterviewer.interview_id == interview_id,
+                    InterviewInterviewer.interviewer_id == current_user.id,
+                )
+            )
+            if not ares.scalar_one_or_none():
+                raise HTTPException(status_code=403, detail="Access denied")
+        else:
+            raise HTTPException(status_code=403, detail="Access denied")
+
     res = await db.execute(
         select(VisionLog)
         .where(VisionLog.interview_id == interview_id)

@@ -1,20 +1,18 @@
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_hr
 from app.core.config import settings
-from app.models.user import User, UserRole, Organisation
+from app.models.user import User, UserRole
 from app.models.interview import Interview, InterviewInterviewer, InterviewStatus
 from app.schemas import InterviewCreate, InterviewWithInterviewers
 from app.services.email_service import send_interview_invite_sync, send_interviewer_notification_sync
 from pathlib import Path
-import os
-import shutil
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
@@ -50,7 +48,7 @@ async def _load_by_token(token: str, db: AsyncSession) -> Interview:
     return iv
 
 
-def _to_schema(iv: Interview, temp_password: str = None) -> InterviewWithInterviewers:
+def _to_schema(iv: Interview, temp_password: Optional[str] = None) -> InterviewWithInterviewers:
     obj = InterviewWithInterviewers.model_validate(iv)
     obj.has_recording = bool(iv.recording_url)
     obj.temp_password = temp_password
@@ -81,6 +79,11 @@ async def schedule_interview(
         )
         db.add(candidate)
         await db.flush()
+    elif candidate.role != UserRole.CANDIDATE:
+        raise HTTPException(
+            status_code=400,
+            detail="Candidate email belongs to a non-candidate account",
+        )
 
     interview = Interview(
         title=payload.title,
@@ -142,7 +145,7 @@ async def schedule_interview(
             interviewer_email=interviewer.email,
             interviewer_name=interviewer.full_name,
             interview_title=interview.title,
-            scheduled_at=interview.scheduled_at.strftime("%Y-%m-%d %H:%M UTC"),
+            scheduled_at=interview.scheduled_at,
             dashboard_link=f"{settings.FRONTEND_URL}/",
         )
 
@@ -154,7 +157,7 @@ async def schedule_interview(
         candidate_email=candidate.email,
         candidate_name=candidate.full_name,
         interview_title=interview.title,
-        scheduled_at=interview.scheduled_at.strftime("%Y-%m-%d %H:%M UTC"),
+        scheduled_at=interview.scheduled_at,
         interview_link=interview_link,
         temp_password=temp_password,
     )
@@ -172,6 +175,7 @@ async def upload_resume(
 ):
     """Upload a candidate resume for AI context."""
     iv = await _load_interview(interview_id, db)
+    _check_access(iv, current_user)
 
     uploads_dir = Path(settings.UPLOADS_DIR) / "resumes"
     uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -194,8 +198,6 @@ async def upload_resume(
                 from pypdf import PdfReader
                 reader = PdfReader(io.BytesIO(content))
                 resume_text = "\n".join(p.extract_text() or "" for p in reader.pages)
-                #--------------------------- Debuging 
-                print("-----------------------------------------\n\nResume Extracted \n"+resume_text[0]+"\n\n-----------------------------------")
             except ImportError:
                 resume_text = "[PDF text extraction requires: pip install pypdf]"
         except Exception:
@@ -267,6 +269,7 @@ async def cancel_interview(
     current_user: User = Depends(require_hr),
 ):
     interview = await _load_interview(interview_id, db)
+    _check_access(interview, current_user)
     if interview.status == InterviewStatus.COMPLETED:
         raise HTTPException(400, "Cannot cancel a completed interview")
     interview.status = InterviewStatus.CANCELLED

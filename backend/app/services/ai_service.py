@@ -75,7 +75,6 @@ def _parse_json_response(text: str) -> Optional[dict]:
 
 async def _chat_groq(system: str, messages: List[dict]) -> Optional[str]:
     if not settings.GROQ_API_KEY:
-        print("-----------------------------------------\n\nGroq api none \n\n---------------------------------")
         return None
     payload = {
         "model": settings.GROQ_MODEL,
@@ -92,7 +91,6 @@ async def _chat_groq(system: str, messages: List[dict]) -> Optional[str]:
                 headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
             )
             resp.raise_for_status()
-            print("-----------------------------------\n\n response from groq --->\n\n -----------------------------------")
             return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error("Groq error: %s", e)
@@ -214,7 +212,6 @@ async def get_ai_response(
     if text is None:
         if settings.LLM_PROVIDER != "mock":
             logger.warning("LLM provider '%s' unavailable — using mock", settings.LLM_PROVIDER)
-            print("-----------------------------------------\n\nLLM provider '%s' unavailable — using mock\n\n---------------------------------" % settings.LLM_PROVIDER)
         text = _mock_interview_response(q_num, interview.job_role)
 
     return text, "INTERVIEW_COMPLETE" in text
