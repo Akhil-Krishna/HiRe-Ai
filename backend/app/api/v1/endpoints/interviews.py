@@ -1,4 +1,6 @@
 
+import base64
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,13 +10,35 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_hr
 from app.core.config import settings
+from app.core.task_runner import enqueue_task_with_fallback, run_task_with_fallback
 from app.models.user import User, UserRole
 from app.models.interview import Interview, InterviewInterviewer, InterviewStatus
 from app.schemas import InterviewCreate, InterviewWithInterviewers
 from app.services.email_service import send_interview_invite_sync, send_interviewer_notification_sync
+from app.services.resume_service import extract_resume_text
+from app.tasks.email_tasks import send_interview_invite_task, send_interviewer_notification_task
+from app.tasks.resume_tasks import extract_resume_text_task
 from pathlib import Path
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
+
+
+async def _queue_interviewer_notification(payload: dict) -> None:
+    await enqueue_task_with_fallback(
+        send_interviewer_notification_task,
+        payload=payload,
+        fallback_callable=lambda: send_interviewer_notification_sync(**payload),
+        endpoint_name="/interviews:schedule:interviewer-email",
+    )
+
+
+async def _queue_candidate_invite(payload: dict) -> None:
+    await enqueue_task_with_fallback(
+        send_interview_invite_task,
+        payload=payload,
+        fallback_callable=lambda: send_interview_invite_sync(**payload),
+        endpoint_name="/interviews:schedule:candidate-email",
+    )
 
 
 def _eager_opts():
@@ -141,25 +165,29 @@ async def schedule_interview(
             interviewer_id=interviewer_id,
         ))
         background_tasks.add_task(
-            send_interviewer_notification_sync,
-            interviewer_email=interviewer.email,
-            interviewer_name=interviewer.full_name,
-            interview_title=interview.title,
-            scheduled_at=interview.scheduled_at,
-            dashboard_link=f"{settings.FRONTEND_URL}/",
+            _queue_interviewer_notification,
+            {
+                "interviewer_email": interviewer.email,
+                "interviewer_name": interviewer.full_name,
+                "interview_title": interview.title,
+                "scheduled_at": interview.scheduled_at.isoformat(),
+                "dashboard_link": f"{settings.FRONTEND_URL}/",
+            },
         )
 
     await db.flush()
 
     interview_link = f"{settings.FRONTEND_URL}/interview/{interview.access_token}"
     background_tasks.add_task(
-        send_interview_invite_sync,
-        candidate_email=candidate.email,
-        candidate_name=candidate.full_name,
-        interview_title=interview.title,
-        scheduled_at=interview.scheduled_at,
-        interview_link=interview_link,
-        temp_password=temp_password,
+        _queue_candidate_invite,
+        {
+            "candidate_email": candidate.email,
+            "candidate_name": candidate.full_name,
+            "interview_title": interview.title,
+            "scheduled_at": interview.scheduled_at.isoformat(),
+            "interview_link": interview_link,
+            "temp_password": temp_password,
+        },
     )
 
     loaded = await _load_interview(interview.id, db)
@@ -188,20 +216,19 @@ async def upload_resume(
     content = await file.read()
     dest.write_bytes(content)
 
-    resume_text = ""
-    if ext == ".txt":
-        resume_text = content.decode("utf-8", errors="replace")
-    elif ext == ".pdf":
-        try:
-            import io
-            try:
-                from pypdf import PdfReader
-                reader = PdfReader(io.BytesIO(content))
-                resume_text = "\n".join(p.extract_text() or "" for p in reader.pages)
-            except ImportError:
-                resume_text = "[PDF text extraction requires: pip install pypdf]"
-        except Exception:
-            resume_text = "[Could not extract PDF text]"
+    async def _fallback_extract():
+        return {"text": extract_resume_text(content, filename=file.filename or f"resume{ext}")}
+
+    extracted = await run_task_with_fallback(
+        extract_resume_text_task,
+        payload={
+            "content_b64": base64.b64encode(content).decode("ascii"),
+            "filename": file.filename or f"resume{ext}",
+        },
+        fallback_callable=_fallback_extract,
+        endpoint_name="/interviews/{id}/resume",
+    )
+    resume_text = extracted.get("text", "")
 
     iv.resume_path = str(dest)
     iv.resume_text = resume_text[:8000] if resume_text else None

@@ -9,15 +9,13 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.logging_config import setup_logging
 from app.core.database import init_db
 from app.core.database import AsyncSessionLocal
 from app.api.v1 import api_router
 from app.models.interview import Interview
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+setup_logging()
 
 
 @asynccontextmanager

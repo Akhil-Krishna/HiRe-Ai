@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
@@ -47,6 +48,20 @@ class Settings(BaseSettings):
     # Set to redis://localhost:6379/0 for multi-worker deployments.
     # Install: pip install redis[asyncio]
     REDIS_URL: Optional[str] = None
+    REDIS_SOCKET_TIMEOUT_SECONDS: float = 1.5
+    REDIS_HEALTH_TIMEOUT_SECONDS: float = 1.0
+
+    # Celery / background execution
+    CELERY_ENABLED: bool = True
+    CELERY_BROKER_URL: Optional[str] = None
+    CELERY_RESULT_BACKEND: Optional[str] = None
+    CELERY_WAIT_TIMEOUT_SECONDS: float = 3.0
+    CELERY_ENQUEUE_TIMEOUT_SECONDS: float = 0.75
+    CELERY_SOFT_TIME_LIMIT_SECONDS: int = 25
+    CELERY_TIME_LIMIT_SECONDS: int = 35
+    CELERY_TASK_MAX_RETRIES: int = 3
+    CELERY_TASK_RETRY_BACKOFF: bool = True
+    CELERY_TASK_RETRY_JITTER: bool = True
 
     # RTC / Meeting room
     RTC_ROOM_CAPACITY: int = 12
@@ -62,6 +77,29 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+
+    CELERY_REALTIME_ENABLED: bool = False
+    CELERY_BACKGROUND_ENABLED: bool = True
+    CELERY_FALLBACK_COOLDOWN_SECONDS: float = 10.0
+
+    @field_validator(
+        "DEBUG",
+        "CELERY_ENABLED",
+        "CELERY_REALTIME_ENABLED",
+        "CELERY_BACKGROUND_ENABLED",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_bool_strings(cls, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in {"1", "true", "yes", "on", "debug"}:
+                return True
+            if v in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+        return value
 
 
 @lru_cache()

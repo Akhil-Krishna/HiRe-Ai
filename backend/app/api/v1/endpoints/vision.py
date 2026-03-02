@@ -6,9 +6,11 @@ from pydantic import BaseModel
 import time
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.task_runner import run_task_with_fallback
 from app.models.user import User, UserRole
 from app.models.interview import Interview, VisionLog, InterviewInterviewer
 from app.services.vision_service import analyze_frame, aggregate_vision_logs
+from app.tasks.vision_tasks import analyze_vision_frame_task
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,17 @@ async def analyze_vision_frame(
     current_user: User = Depends(get_current_user),
 ):
     started = time.perf_counter()
-    result = await analyze_frame(payload.frame)
+
+    async def _fallback():
+        return await analyze_frame(payload.frame)
+
+    result = await run_task_with_fallback(
+        analyze_vision_frame_task,
+        payload={"frame": payload.frame},
+        fallback_callable=_fallback,
+        endpoint_name="/vision/analyze",
+        realtime=True,
+    )
     if "processing_ms" not in result:
         result["processing_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
     result.setdefault("provider", "deepface")

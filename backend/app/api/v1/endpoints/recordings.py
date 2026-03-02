@@ -1,7 +1,5 @@
-import os
 import logging
 from pathlib import Path
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
@@ -11,9 +9,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.task_runner import enqueue_task_with_fallback
 from app.models.user import User, UserRole
 from app.models.interview import Interview, InterviewInterviewer
 from app.schemas import RecordingUploadResponse
+from app.services.recording_service import process_recording_metadata
+from app.tasks.recording_tasks import process_recording_metadata_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/recordings", tags=["recordings"])
@@ -117,6 +118,13 @@ async def upload_recording(
     interview.recording_url = str(dest)
     interview.recording_size_bytes = size
     await db.flush()
+
+    await enqueue_task_with_fallback(
+        process_recording_metadata_task,
+        payload={"recording_path": str(dest), "size_bytes": size},
+        fallback_callable=lambda: process_recording_metadata(str(dest), size),
+        endpoint_name="/recordings/upload",
+    )
 
     logger.info("Recording saved for interview %s — %.1f MB", interview.id, size / 1024 / 1024)
 

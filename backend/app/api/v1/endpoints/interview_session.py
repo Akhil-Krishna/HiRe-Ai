@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.task_runner import run_task_with_fallback
 from app.models.user import User, UserRole
 from app.models.interview import (
     Interview, InterviewMessage, InterviewInterviewer,
@@ -23,8 +24,29 @@ from app.schemas import (
 )
 from app.services.ai_service import get_ai_response, generate_final_evaluation
 from app.services.vision_service import aggregate_vision_logs
+from app.tasks.ai_tasks import generate_ai_response_task, generate_final_evaluation_task
 
 router = APIRouter(prefix="/interview-session", tags=["interview-session"])
+
+
+def _serialize_interview_for_ai(iv: Interview) -> dict:
+    return {
+        "job_role": iv.job_role,
+        "question_bank": iv.question_bank,
+        "resume_text": iv.resume_text,
+        "duration_minutes": iv.duration_minutes,
+    }
+
+
+def _serialize_messages_for_ai(messages: List[InterviewMessage]) -> List[dict]:
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "code_snippet": m.code_snippet,
+        }
+        for m in messages
+    ]
 
 
 async def _get_iv(token: str, db: AsyncSession) -> Interview:
@@ -108,7 +130,23 @@ async def start_interview(
     iv.started_at = datetime.now(timezone.utc)
     await db.flush()
 
-    ai_text, _ = await get_ai_response(interview=iv, messages=[], candidate_message="[START INTERVIEW]")
+    async def _start_fallback():
+        text, complete = await get_ai_response(interview=iv, messages=[], candidate_message="[START INTERVIEW]")
+        return {"text": text, "is_complete": complete}
+
+    ai_result = await run_task_with_fallback(
+        generate_ai_response_task,
+        payload={
+            **_serialize_interview_for_ai(iv),
+            "messages": [],
+            "candidate_message": "[START INTERVIEW]",
+            "code_snippet": None,
+        },
+        fallback_callable=_start_fallback,
+        endpoint_name="/interview-session/start",
+        realtime=True,
+    )
+    ai_text = ai_result.get("text", "")
     ai_msg = InterviewMessage(interview_id=iv.id, role="ai", content=ai_text)
     db.add(ai_msg)
     await db.flush()
@@ -142,11 +180,29 @@ async def chat(
         return ChatResponse(message="", is_complete=False, ai_paused=True)
 
     msgs = sorted(iv.messages, key=lambda m: m.timestamp)
-    ai_text, is_complete = await get_ai_response(
-        interview=iv, messages=msgs,
-        candidate_message=payload.content,
-        code_snippet=payload.code_snippet,
+    async def _chat_fallback():
+        text, complete = await get_ai_response(
+            interview=iv,
+            messages=msgs,
+            candidate_message=payload.content,
+            code_snippet=payload.code_snippet,
+        )
+        return {"text": text, "is_complete": complete}
+
+    ai_result = await run_task_with_fallback(
+        generate_ai_response_task,
+        payload={
+            **_serialize_interview_for_ai(iv),
+            "messages": _serialize_messages_for_ai(msgs),
+            "candidate_message": payload.content,
+            "code_snippet": payload.code_snippet,
+        },
+        fallback_callable=_chat_fallback,
+        endpoint_name="/interview-session/chat",
+        realtime=True,
     )
+    ai_text = ai_result.get("text", "")
+    is_complete = bool(ai_result.get("is_complete"))
     db.add(InterviewMessage(interview_id=iv.id, role="ai", content=ai_text))
     await db.flush()
 
@@ -385,9 +441,26 @@ async def complete_interview(
         final_cheating = float(payload.cheating_score)
 
     msgs = sorted(iv.messages, key=lambda m: m.timestamp)
-    evaluation = await generate_final_evaluation(
-        interview=iv, messages=msgs,
-        emotion_data=vision_summary, cheating_score=final_cheating,
+    async def _complete_fallback():
+        return await generate_final_evaluation(
+            interview=iv,
+            messages=msgs,
+            emotion_data=vision_summary,
+            cheating_score=final_cheating,
+        )
+
+    evaluation = await run_task_with_fallback(
+        generate_final_evaluation_task,
+        payload={
+            "job_role": iv.job_role,
+            "resume_text": iv.resume_text,
+            "messages": _serialize_messages_for_ai(msgs),
+            "emotion_data": vision_summary,
+            "cheating_score": final_cheating,
+        },
+        fallback_callable=_complete_fallback,
+        endpoint_name="/interview-session/complete",
+        realtime=True,
     )
 
     iv.status = InterviewStatus.COMPLETED

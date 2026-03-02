@@ -2,6 +2,7 @@
 import httpx
 import json
 import logging
+from types import SimpleNamespace
 from typing import Optional, List, Tuple
 
 from app.core.config import settings
@@ -289,3 +290,48 @@ async def generate_final_evaluation(
             result[key] = float(result[key])
 
     return result
+
+
+async def get_ai_response_from_payload(payload: dict) -> dict:
+    interview = SimpleNamespace(
+        job_role=payload.get("job_role", ""),
+        question_bank=payload.get("question_bank"),
+        resume_text=payload.get("resume_text"),
+        duration_minutes=payload.get("duration_minutes", 60),
+    )
+    messages = [
+        SimpleNamespace(
+            role=msg.get("role", ""),
+            content=msg.get("content", ""),
+            code_snippet=msg.get("code_snippet"),
+        )
+        for msg in payload.get("messages", [])
+    ]
+    text, is_complete = await get_ai_response(
+        interview=interview,
+        messages=messages,
+        candidate_message=payload.get("candidate_message", ""),
+        code_snippet=payload.get("code_snippet"),
+    )
+    return {"text": text, "is_complete": is_complete}
+
+
+async def generate_final_evaluation_from_payload(payload: dict) -> dict:
+    interview = SimpleNamespace(
+        job_role=payload.get("job_role", ""),
+        resume_text=payload.get("resume_text"),
+    )
+    messages = [
+        SimpleNamespace(
+            role=msg.get("role", ""),
+            content=msg.get("content", ""),
+            code_snippet=msg.get("code_snippet"),
+        )
+        for msg in payload.get("messages", [])
+    ]
+    return await generate_final_evaluation(
+        interview=interview,
+        messages=messages,
+        emotion_data=payload.get("emotion_data"),
+        cheating_score=payload.get("cheating_score"),
+    )

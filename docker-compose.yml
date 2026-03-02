@@ -1,7 +1,9 @@
 version: "3.9"
 services:
   app:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -13,13 +15,49 @@ services:
       - SECRET_KEY=${SECRET_KEY:-changeme}
       - DEBUG=${DEBUG:-false}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8000}
+      - CELERY_ENABLED=${CELERY_ENABLED:-true}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
-      - ./recordings:/app/recordings
-      - ./uploads:/app/uploads
-      - ./hireai.db:/app/hireai.db
+      - ./backend/recordings:/app/recordings
+      - ./backend/uploads:/app/uploads
+      - ./backend/hireai.db:/app/hireai.db
     restart: unless-stopped
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./hireai.db
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - VISION_PROVIDER=${VISION_PROVIDER:-mock}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-log}
+      - SECRET_KEY=${SECRET_KEY:-changeme}
+      - DEBUG=${DEBUG:-false}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8000}
+      - CELERY_ENABLED=${CELERY_ENABLED:-true}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    volumes:
+      - ./backend/recordings:/app/recordings
+      - ./backend/uploads:/app/uploads
+      - ./backend/hireai.db:/app/hireai.db
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"

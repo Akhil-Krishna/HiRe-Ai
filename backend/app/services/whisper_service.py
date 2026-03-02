@@ -32,8 +32,6 @@ def _load_model_sync(size: str, device: str, compute: str):
 async def warmup_model():
     """
     Pre-load the Whisper model at server startup.
-    Call this from the FastAPI lifespan so the first STT request is instant.
-    Safe to call multiple times — no-op if already loaded.
     """
     global _model
     if _model is not None:
