@@ -10,12 +10,17 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging
+from app.core.error_handlers import register_exception_handlers
+from app.core.middleware import RequestContextMiddleware
 from app.core.database import init_db
 from app.core.database import AsyncSessionLocal
 from app.api.v1 import api_router
 from app.models.interview import Interview
 
-setup_logging()
+try:
+    setup_logging()
+except Exception:
+    logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
@@ -34,6 +39,14 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(warmup_model())
     except Exception as _e:
         print(f"Whisper warmup skipped: {_e}")
+    if settings.ENABLE_VISION_WARMUP:
+        try:
+            from app.services.vision_service import analyze_frame
+            import asyncio
+            # tiny blank frame warmup to initialize deps lazily
+            asyncio.create_task(analyze_frame(""))
+        except Exception as _e:
+            print(f"Vision warmup skipped: {_e}")
 
     print("=" * 60)
     print(f"  {settings.APP_NAME}  —  {settings.APP_ENV}")
@@ -94,6 +107,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if settings.ENABLE_REQUEST_ID_MIDDLEWARE:
+    app.add_middleware(RequestContextMiddleware)
+
+register_exception_handlers(app)
 
 app.include_router(api_router, prefix="/api/v1")
 
@@ -130,4 +147,16 @@ async def serve_watch(access_token: str):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0"}
+    stt_ready = None
+    vision_ready = None
+    try:
+        from app.services.whisper_service import model_ready as stt_model_ready
+        stt_ready = bool(stt_model_ready())
+    except Exception:
+        stt_ready = None
+    try:
+        from app.services.vision_service import model_ready as vision_model_ready
+        vision_ready = bool(vision_model_ready())
+    except Exception:
+        vision_ready = None
+    return {"status": "ok", "version": "2.0.0", "stt_model_ready": stt_ready, "vision_model_ready": vision_ready}

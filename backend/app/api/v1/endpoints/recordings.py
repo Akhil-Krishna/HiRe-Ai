@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Header
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from app.models.user import User, UserRole
 from app.models.interview import Interview, InterviewInterviewer
 from app.schemas import RecordingUploadResponse
 from app.services.recording_service import process_recording_metadata
+from app.services.idempotency_service import check_idempotency, store_idempotency_response
 from app.tasks.recording_tasks import process_recording_metadata_task
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ def _check_download_access(interview: Interview, user: User) -> None:
 async def upload_recording(
     interview_token: str,
     file: UploadFile = File(...),
+    x_idempotency_key: str | None = Header(default=None, alias="X-Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -92,6 +94,20 @@ async def upload_recording(
     ext = ".webm" if "webm" in (ct + filename_lower) else ".mp4"
     safe_name = f"interview_{interview.id}{ext}"
     dest = RECORDINGS_DIR / safe_name
+
+    idem_payload = {
+        "interview_token": interview_token,
+        "filename": file.filename or "",
+        "content_type": file.content_type or "",
+    }
+    idem_record, idem_response = await check_idempotency(
+        db,
+        scope="recordings.upload",
+        key=x_idempotency_key,
+        payload=idem_payload,
+    )
+    if idem_response is not None:
+        return RecordingUploadResponse.model_validate(idem_response)
 
     # Stream to disk with size guard
     size = 0
@@ -128,12 +144,14 @@ async def upload_recording(
 
     logger.info("Recording saved for interview %s — %.1f MB", interview.id, size / 1024 / 1024)
 
-    return RecordingUploadResponse(
+    response = RecordingUploadResponse(
         success=True,
         recording_url=str(dest),
         size_bytes=size,
         message=f"Recording saved ({size // 1024 // 1024:.1f} MB)",
     )
+    await store_idempotency_response(db, idem_record, response.model_dump(mode="json"))
+    return response
 
 
 # ── Download ──────────────────────────────────────────────────────────────────

@@ -31,6 +31,19 @@ celery_app.conf.update(
     worker_max_tasks_per_child=200,
     result_expires=3600,
     timezone="UTC",
+    task_default_queue="celery",
+    task_routes={
+        "app.tasks.ai.*": {"queue": "ai"},
+        "app.tasks.vision.*": {"queue": "vision"},
+        "app.tasks.stt.*": {"queue": "stt"},
+        "app.tasks.email.*": {"queue": "email"},
+        "app.tasks.resume.*": {"queue": "resume"},
+        "app.tasks.recording.*": {"queue": "recording"},
+    },
+    broker_transport_options={
+        "visibility_timeout": max(settings.CELERY_TIME_LIMIT_SECONDS * 3, 120),
+        "socket_timeout": settings.REDIS_SOCKET_TIMEOUT_SECONDS,
+    },
     imports=(
         "app.tasks.ai_tasks",
         "app.tasks.vision_tasks",

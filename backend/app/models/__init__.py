@@ -3,3 +3,4 @@ from app.models.interview import (
     Interview, InterviewInterviewer, InterviewMessage,
     VisionLog, InterviewStatus
 )
+from app.models.idempotency import IdempotencyKey

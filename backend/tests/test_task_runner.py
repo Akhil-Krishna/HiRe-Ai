@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from app.core import task_runner
 
@@ -14,6 +15,12 @@ class _ResultOk:
 class _ResultErr:
     def get(self, timeout=None):
         raise RuntimeError("result failed")
+
+
+class _ResultSlow:
+    def get(self, timeout=None):
+        time.sleep(0.2)
+        return {"ok": "late"}
 
 
 class _TaskOk:
@@ -35,6 +42,13 @@ class _TaskResultErr:
 
     def apply_async(self, kwargs=None):
         return _ResultErr()
+
+
+class _TaskResultSlow:
+    name = "result-slow-task"
+
+    def apply_async(self, kwargs=None):
+        return _ResultSlow()
 
 
 def test_run_task_with_fallback_success(monkeypatch):
@@ -80,6 +94,23 @@ def test_run_task_with_fallback_on_result_failure(monkeypatch):
             payload={"x": 1},
             fallback_callable=lambda: {"fallback": True},
             endpoint_name="/test",
+        )
+        assert out == {"fallback": True}
+
+    asyncio.run(_run())
+
+
+def test_run_task_with_fallback_on_result_timeout(monkeypatch):
+    monkeypatch.setattr(task_runner.settings, "CELERY_ENABLED", True)
+    monkeypatch.setattr(task_runner.settings, "CELERY_ENQUEUE_TIMEOUT_SECONDS", 1.0)
+
+    async def _run():
+        out = await task_runner.run_task_with_fallback(
+            _TaskResultSlow(),
+            payload={"x": 1},
+            fallback_callable=lambda: {"fallback": True},
+            endpoint_name="/test",
+            wait_timeout=0.01,
         )
         assert out == {"fallback": True}
 

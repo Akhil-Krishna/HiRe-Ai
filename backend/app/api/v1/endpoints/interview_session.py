@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
+import time
+import logging
 from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.task_runner import run_task_with_fallback
 from app.models.user import User, UserRole
 from app.models.interview import (
     Interview, InterviewMessage, InterviewInterviewer,
@@ -22,31 +23,16 @@ from app.schemas import (
     CompleteInterviewRequest, EvaluationResult, ScoreBreakdown,
     InterviewerQuestion,
 )
-from app.services.ai_service import get_ai_response, generate_final_evaluation
+from app.services.access_policy import AccessPolicy
+from app.services.interview_orchestrator import (
+    chat_turn,
+    complete_interview_evaluation,
+    start_interview_ai,
+)
 from app.services.vision_service import aggregate_vision_logs
-from app.tasks.ai_tasks import generate_ai_response_task, generate_final_evaluation_task
 
 router = APIRouter(prefix="/interview-session", tags=["interview-session"])
-
-
-def _serialize_interview_for_ai(iv: Interview) -> dict:
-    return {
-        "job_role": iv.job_role,
-        "question_bank": iv.question_bank,
-        "resume_text": iv.resume_text,
-        "duration_minutes": iv.duration_minutes,
-    }
-
-
-def _serialize_messages_for_ai(messages: List[InterviewMessage]) -> List[dict]:
-    return [
-        {
-            "role": m.role,
-            "content": m.content,
-            "code_snippet": m.code_snippet,
-        }
-        for m in messages
-    ]
+logger = logging.getLogger(__name__)
 
 
 async def _get_iv(token: str, db: AsyncSession) -> Interview:
@@ -117,9 +103,9 @@ async def start_interview(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    started = time.perf_counter()
     iv = await _get_iv(interview_token, db)
-    if iv.candidate_id != current_user.id:
-        raise HTTPException(403, "Only the candidate can start this interview")
+    AccessPolicy.ensure_candidate_owner(iv, current_user, "Only the candidate can start this interview")
     if iv.status == InterviewStatus.COMPLETED:
         raise HTTPException(400, "Interview already completed")
     if iv.status == InterviewStatus.IN_PROGRESS:
@@ -129,29 +115,22 @@ async def start_interview(
     iv.status = InterviewStatus.IN_PROGRESS
     iv.started_at = datetime.now(timezone.utc)
     await db.flush()
-
-    async def _start_fallback():
-        text, complete = await get_ai_response(interview=iv, messages=[], candidate_message="[START INTERVIEW]")
-        return {"text": text, "is_complete": complete}
-
-    ai_result = await run_task_with_fallback(
-        generate_ai_response_task,
-        payload={
-            **_serialize_interview_for_ai(iv),
-            "messages": [],
-            "candidate_message": "[START INTERVIEW]",
-            "code_snippet": None,
-        },
-        fallback_callable=_start_fallback,
-        endpoint_name="/interview-session/start",
-        realtime=True,
-    )
+    ai_started = time.perf_counter()
+    ai_result = await start_interview_ai(iv)
+    ai_ms = round((time.perf_counter() - ai_started) * 1000.0, 1)
     ai_text = ai_result.get("text", "")
     ai_msg = InterviewMessage(interview_id=iv.id, role="ai", content=ai_text)
     db.add(ai_msg)
     await db.flush()
     await db.refresh(ai_msg)
 
+    total_ms = round((time.perf_counter() - started) * 1000.0, 1)
+    logger.info(
+        "Interview start completed user=%s ai_ms=%s total_ms=%s",
+        current_user.id,
+        ai_ms,
+        total_ms,
+    )
     return {"status": "started", "messages": [MessageOut.model_validate(ai_msg)], "ai_paused": False}
 
 
@@ -162,9 +141,9 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    started = time.perf_counter()
     iv = await _get_iv(interview_token, db)
-    if iv.candidate_id != current_user.id:
-        raise HTTPException(403, "Only candidate can send messages")
+    AccessPolicy.ensure_candidate_owner(iv, current_user, "Only candidate can send messages")
     if iv.status != InterviewStatus.IN_PROGRESS:
         raise HTTPException(400, "Interview not in progress")
 
@@ -180,32 +159,21 @@ async def chat(
         return ChatResponse(message="", is_complete=False, ai_paused=True)
 
     msgs = sorted(iv.messages, key=lambda m: m.timestamp)
-    async def _chat_fallback():
-        text, complete = await get_ai_response(
-            interview=iv,
-            messages=msgs,
-            candidate_message=payload.content,
-            code_snippet=payload.code_snippet,
-        )
-        return {"text": text, "is_complete": complete}
-
-    ai_result = await run_task_with_fallback(
-        generate_ai_response_task,
-        payload={
-            **_serialize_interview_for_ai(iv),
-            "messages": _serialize_messages_for_ai(msgs),
-            "candidate_message": payload.content,
-            "code_snippet": payload.code_snippet,
-        },
-        fallback_callable=_chat_fallback,
-        endpoint_name="/interview-session/chat",
-        realtime=True,
-    )
+    ai_started = time.perf_counter()
+    ai_result = await chat_turn(iv, msgs, payload.content, payload.code_snippet)
+    ai_ms = round((time.perf_counter() - ai_started) * 1000.0, 1)
     ai_text = ai_result.get("text", "")
     is_complete = bool(ai_result.get("is_complete"))
     db.add(InterviewMessage(interview_id=iv.id, role="ai", content=ai_text))
     await db.flush()
 
+    total_ms = round((time.perf_counter() - started) * 1000.0, 1)
+    logger.info(
+        "Interview chat completed user=%s ai_ms=%s total_ms=%s",
+        current_user.id,
+        ai_ms,
+        total_ms,
+    )
     return ChatResponse(message=ai_text, is_complete=is_complete, ai_paused=False)
 
 
@@ -402,9 +370,9 @@ async def complete_interview(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    started = time.perf_counter()
     iv = await _get_iv(interview_token, db)
-    if iv.candidate_id != current_user.id:
-        raise HTTPException(403, "Only candidate can complete this interview")
+    AccessPolicy.ensure_candidate_owner(iv, current_user, "Only candidate can complete this interview")
 
     if iv.status == InterviewStatus.COMPLETED:
         stored = iv.emotion_scores or {}
@@ -441,27 +409,9 @@ async def complete_interview(
         final_cheating = float(payload.cheating_score)
 
     msgs = sorted(iv.messages, key=lambda m: m.timestamp)
-    async def _complete_fallback():
-        return await generate_final_evaluation(
-            interview=iv,
-            messages=msgs,
-            emotion_data=vision_summary,
-            cheating_score=final_cheating,
-        )
-
-    evaluation = await run_task_with_fallback(
-        generate_final_evaluation_task,
-        payload={
-            "job_role": iv.job_role,
-            "resume_text": iv.resume_text,
-            "messages": _serialize_messages_for_ai(msgs),
-            "emotion_data": vision_summary,
-            "cheating_score": final_cheating,
-        },
-        fallback_callable=_complete_fallback,
-        endpoint_name="/interview-session/complete",
-        realtime=True,
-    )
+    eval_started = time.perf_counter()
+    evaluation = await complete_interview_evaluation(iv, msgs, vision_summary, final_cheating)
+    eval_ms = round((time.perf_counter() - eval_started) * 1000.0, 1)
 
     iv.status = InterviewStatus.COMPLETED
     iv.ended_at = datetime.now(timezone.utc)
@@ -476,6 +426,13 @@ async def complete_interview(
     iv.emotion_scores = vision_summary
     await db.flush()
 
+    total_ms = round((time.perf_counter() - started) * 1000.0, 1)
+    logger.info(
+        "Interview complete evaluation user=%s eval_ms=%s total_ms=%s",
+        current_user.id,
+        eval_ms,
+        total_ms,
+    )
     return EvaluationResult(
         overall_score=evaluation["overall_score"],
         answer_score=evaluation["answer_score"],

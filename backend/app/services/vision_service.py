@@ -62,6 +62,10 @@ def _load_deps() -> bool:
     return (_deepface is not None and _cv2 is not None and _np is not None)
 
 
+def model_ready() -> bool:
+    return _deepface is not None and _cv2 is not None and _np is not None
+
+
 # ── Emotion → interview score mapping ─────────────────────────────────────────
 EMOTION_MAP = {
     "happy":    {"confidence": 88.0, "engagement": 92.0, "stress": 8.0},

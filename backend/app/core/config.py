@@ -38,6 +38,8 @@ class Settings(BaseSettings):
 
     # Vision: deepface | mock
     VISION_PROVIDER: str = "deepface"
+    VISION_PERSIST_ENABLED: bool = True
+    VISION_LOG_SAMPLE_EVERY_N: int = 3
 
     FRONTEND_URL: str = "http://localhost:8000"
     RECORDINGS_DIR: str = "recordings"
@@ -50,6 +52,7 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None
     REDIS_SOCKET_TIMEOUT_SECONDS: float = 1.5
     REDIS_HEALTH_TIMEOUT_SECONDS: float = 1.0
+    REDIS_STREAM_DB: int = 0
 
     # Celery / background execution
     CELERY_ENABLED: bool = True
@@ -73,6 +76,10 @@ class Settings(BaseSettings):
     STT_MODEL: str = "base"    # tiny | base | small | medium
     STT_DEVICE: str = "cpu"    # cpu | cuda
     STT_COMPUTE: str = "int8"  # int8 | float16 | float32
+    STT_BEAM_SIZE: int = 2
+    STT_VAD_FILTER: bool = True
+    STT_VAD_MIN_SILENCE_MS: int = 200
+    ENABLE_VISION_WARMUP: bool = False
 
     class Config:
         env_file = ".env"
@@ -81,12 +88,28 @@ class Settings(BaseSettings):
     CELERY_REALTIME_ENABLED: bool = False
     CELERY_BACKGROUND_ENABLED: bool = True
     CELERY_FALLBACK_COOLDOWN_SECONDS: float = 10.0
+    STT_LOCAL_FASTPATH_ENABLED: bool = True
+    AI_LOCAL_FASTPATH_ENABLED: bool = True
+    ENABLE_GLOBAL_ERROR_ENVELOPE: bool = True
+    ENABLE_REQUEST_ID_MIDDLEWARE: bool = True
+    ENABLE_IDEMPOTENCY: bool = True
+    ROOM_BACKEND: str = "auto"  # auto | memory | redis
+    RTC_HEARTBEAT_SECONDS: int = 10
+    RTC_STALE_PARTICIPANT_TTL_SECONDS: int = 45
 
     @field_validator(
         "DEBUG",
         "CELERY_ENABLED",
         "CELERY_REALTIME_ENABLED",
         "CELERY_BACKGROUND_ENABLED",
+        "ENABLE_GLOBAL_ERROR_ENVELOPE",
+        "ENABLE_REQUEST_ID_MIDDLEWARE",
+        "ENABLE_IDEMPOTENCY",
+        "ENABLE_VISION_WARMUP",
+        "VISION_PERSIST_ENABLED",
+        "STT_VAD_FILTER",
+        "STT_LOCAL_FASTPATH_ENABLED",
+        "AI_LOCAL_FASTPATH_ENABLED",
         mode="before",
     )
     @classmethod
@@ -100,6 +123,16 @@ class Settings(BaseSettings):
             if v in {"0", "false", "no", "off", "release", "prod", "production"}:
                 return False
         return value
+
+    @field_validator("ROOM_BACKEND", mode="before")
+    @classmethod
+    def _normalize_room_backend(cls, value):
+        if value is None:
+            return "auto"
+        v = str(value).strip().lower()
+        if v in {"auto", "memory", "redis"}:
+            return v
+        return "auto"
 
 
 @lru_cache()

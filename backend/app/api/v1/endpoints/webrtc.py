@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -16,6 +17,7 @@ from app.services.room_manager import RoomManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webrtc"])
+WORKER_ID = uuid.uuid4().hex
 
 room_manager = RoomManager(
     capacity=settings.RTC_ROOM_CAPACITY,
@@ -94,6 +96,31 @@ async def _broadcast(interview_token: str, payload: dict, exclude_pid: Optional[
     sockets = await room_manager.others_ws(interview_token, exclude_participant_id=exclude_pid)
     for ws in sockets:
         await _send_json_safe(ws, payload)
+    await room_manager.publish_event(
+        interview_token,
+        {
+            **payload,
+            "__exclude_pid": exclude_pid,
+            "__worker_id": WORKER_ID,
+        },
+    )
+
+
+async def _relay_external_events(interview_token: str, websocket: WebSocket, self_pid: str) -> None:
+    if room_manager.backend_name() != "redis":
+        return
+    async for msg in room_manager.subscribe_events(interview_token):
+        if msg.get("__worker_id") == WORKER_ID:
+            continue
+        exclude_pid = msg.get("__exclude_pid")
+        target = msg.get("to")
+        if exclude_pid and exclude_pid == self_pid:
+            continue
+        if target and target != self_pid:
+            continue
+        msg.pop("__exclude_pid", None)
+        msg.pop("__worker_id", None)
+        await _send_json_safe(websocket, msg)
 
 
 @router.websocket("/ws/rtc/{interview_token}")
@@ -105,6 +132,8 @@ async def rtc_signaling(
 ):
     participant = None
     joined = False
+    relay_task: Optional[asyncio.Task] = None
+    missed_heartbeats = 0
 
     if not token:
         await websocket.close(code=4001, reason="Missing auth token")
@@ -186,6 +215,7 @@ async def rtc_signaling(
         },
         exclude_pid=participant.participant_id,
     )
+    relay_task = asyncio.create_task(_relay_external_events(interview_token, websocket, participant.participant_id))
 
     for peer in participants_now:
         peer_pid = peer.get("participant_id")
@@ -200,10 +230,14 @@ async def rtc_signaling(
             try:
                 raw = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=float(settings.RTC_SIGNAL_TIMEOUT_SECONDS),
+                    timeout=float(max(settings.RTC_HEARTBEAT_SECONDS, 1)),
                 )
             except asyncio.TimeoutError:
                 await _send_json_safe(websocket, {"type": "ping"})
+                missed_heartbeats += 1
+                if missed_heartbeats >= 3:
+                    await websocket.close(code=1011, reason="Heartbeat timeout")
+                    break
                 continue
 
             try:
@@ -213,6 +247,8 @@ async def rtc_signaling(
                 continue
 
             msg_type = msg.get("type")
+            await room_manager.touch(interview_token, participant.participant_id)
+            missed_heartbeats = 0
             if msg_type == "ping":
                 await _send_json_safe(websocket, {"type": "pong"})
                 continue
@@ -225,15 +261,21 @@ async def rtc_signaling(
                     await _send_json_safe(websocket, {"type": "error", "detail": "Missing target participant id"})
                     continue
                 target_ws = await room_manager.get_ws(interview_token, target_pid)
-                if not target_ws:
-                    await _send_json_safe(websocket, {"type": "error", "detail": "Target participant not found"})
-                    continue
                 relay = {"type": msg_type, "from": participant.participant_id, "to": target_pid}
                 if msg_type in ("offer", "answer"):
                     relay["sdp"] = msg.get("sdp")
                 else:
                     relay["candidate"] = msg.get("candidate")
-                await _send_json_safe(target_ws, relay)
+                if target_ws:
+                    await _send_json_safe(target_ws, relay)
+                else:
+                    if room_manager.backend_name() == "redis":
+                        await room_manager.publish_event(
+                            interview_token,
+                            {**relay, "__worker_id": WORKER_ID},
+                        )
+                    else:
+                        await _send_json_safe(websocket, {"type": "error", "detail": "Target participant not found"})
                 continue
 
             if msg_type == "media_state":
@@ -277,6 +319,8 @@ async def rtc_signaling(
         )
         await _send_json_safe(websocket, {"type": "error", "detail": "Server signaling error"})
     finally:
+        if relay_task:
+            relay_task.cancel()
         if joined and participant:
             await room_manager.leave(interview_token, participant.participant_id)
             remaining = await room_manager.snapshot(interview_token)

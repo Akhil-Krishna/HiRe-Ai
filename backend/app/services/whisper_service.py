@@ -5,6 +5,8 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ── Dedicated thread pool for STT — isolated from the vision pool ─────────────
@@ -17,7 +19,7 @@ _model = None
 _model_lock = asyncio.Lock()
 
 def _stt_model_name() -> str:
-    return os.getenv("STT_MODEL", "base")
+    return os.getenv("STT_MODEL", settings.STT_MODEL)
 
 
 def _load_model_sync(size: str, device: str, compute: str):
@@ -70,6 +72,10 @@ async def _get_model():
     return _model
 
 
+def model_ready() -> bool:
+    return _model not in (None, "unavailable")
+
+
 def _transcribe_sync(model, audio_bytes: bytes, language: str) -> tuple:
     """
     Pure synchronous transcription — runs inside _stt_executor.
@@ -77,12 +83,16 @@ def _transcribe_sync(model, audio_bytes: bytes, language: str) -> tuple:
     """
     started = time.perf_counter()
     audio_io = io.BytesIO(audio_bytes)
+    beam_size = int(os.getenv("STT_BEAM_SIZE", str(settings.STT_BEAM_SIZE)))
+    vad_filter_raw = os.getenv("STT_VAD_FILTER")
+    vad_filter = settings.STT_VAD_FILTER if vad_filter_raw is None else vad_filter_raw.strip().lower() in {"1", "true", "yes", "on"}
+    vad_min_silence = int(os.getenv("STT_VAD_MIN_SILENCE_MS", str(settings.STT_VAD_MIN_SILENCE_MS)))
     segments, info = model.transcribe(
         audio_io,
         language=language if language != "auto" else None,
-        beam_size=3,            # faster than default 5, near-identical accuracy
-        vad_filter=True,        # skip silent frames inside the audio
-        vad_parameters={"min_silence_duration_ms": 200},
+        beam_size=max(1, beam_size),  # configurable latency/quality tradeoff
+        vad_filter=vad_filter,
+        vad_parameters={"min_silence_duration_ms": max(50, vad_min_silence)},
         word_timestamps=False,  # not needed, skip extra work
     )
     # segments is a generator — must be consumed inside this thread
@@ -128,7 +138,7 @@ async def transcribe_audio(audio_bytes: bytes, language: str = "en") -> dict:
             _transcribe_sync, model, audio_bytes, language
         )
         total_ms = (time.perf_counter() - started) * 1000.0
-        logger.debug(
+        logger.info(
             "STT transcribe bytes=%d lang=%s model=%s infer_ms=%.1f total_ms=%.1f",
             len(audio_bytes), language, model_name, infer_ms, total_ms
         )

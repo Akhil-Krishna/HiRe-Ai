@@ -5,6 +5,7 @@ import time
 import base64
 
 from fastapi import APIRouter, UploadFile, File, Depends, Form
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.core.task_runner import run_task_with_fallback
 from app.models.user import User
@@ -27,6 +28,7 @@ async def transcribe(
     """
     started = time.perf_counter()
     audio_bytes = await audio.read()
+    read_ms = round((time.perf_counter() - started) * 1000.0, 1)
     if not audio_bytes:
         return {
             "text": "",
@@ -38,24 +40,33 @@ async def transcribe(
     async def _fallback():
         return await transcribe_audio(audio_bytes, language=language)
 
-    result = await run_task_with_fallback(
-        transcribe_audio_task,
-        payload={
-            "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
-            "language": language,
-        },
-        fallback_callable=_fallback,
-        endpoint_name="/stt/transcribe",
-        realtime=True,
-    )
+    transcribe_started = time.perf_counter()
+    if settings.STT_LOCAL_FASTPATH_ENABLED and not settings.CELERY_REALTIME_ENABLED:
+        result = await _fallback()
+    else:
+        result = await run_task_with_fallback(
+            transcribe_audio_task,
+            payload={
+                "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
+                "language": language,
+            },
+            fallback_callable=_fallback,
+            endpoint_name="/stt/transcribe",
+            realtime=True,
+        )
+    transcribe_ms = round((time.perf_counter() - transcribe_started) * 1000.0, 1)
     if "processing_ms" not in result:
         result["processing_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
+    total_ms = round((time.perf_counter() - started) * 1000.0, 1)
     logger.info(
-        "STT endpoint user=%s bytes=%d available=%s model=%s processing_ms=%s",
+        "STT endpoint user=%s bytes=%d available=%s model=%s read_ms=%s transcribe_ms=%s processing_ms=%s total_ms=%s",
         current_user.id,
         len(audio_bytes),
         result.get("available"),
         result.get("model"),
+        read_ms,
+        transcribe_ms,
         result.get("processing_ms"),
+        total_ms,
     )
     return result

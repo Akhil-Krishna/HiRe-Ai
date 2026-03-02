@@ -1,7 +1,7 @@
 
 import base64
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -15,6 +15,7 @@ from app.models.user import User, UserRole
 from app.models.interview import Interview, InterviewInterviewer, InterviewStatus
 from app.schemas import InterviewCreate, InterviewWithInterviewers
 from app.services.email_service import send_interview_invite_sync, send_interviewer_notification_sync
+from app.services.idempotency_service import check_idempotency, store_idempotency_response
 from app.services.resume_service import extract_resume_text
 from app.tasks.email_tasks import send_interview_invite_task, send_interviewer_notification_task
 from app.tasks.resume_tasks import extract_resume_text_task
@@ -83,9 +84,28 @@ def _to_schema(iv: Interview, temp_password: Optional[str] = None) -> InterviewW
 async def schedule_interview(
     payload: InterviewCreate,
     background_tasks: BackgroundTasks,
+    x_idempotency_key: Optional[str] = Header(default=None, alias="X-Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_hr),
 ):
+    idem_payload = {
+        "title": payload.title,
+        "job_role": payload.job_role,
+        "description": payload.description,
+        "candidate_email": payload.candidate_email,
+        "scheduled_at": payload.scheduled_at.isoformat(),
+        "duration_minutes": payload.duration_minutes,
+        "interviewer_ids": sorted(payload.interviewer_ids),
+    }
+    idem_record, idem_response = await check_idempotency(
+        db,
+        scope="interviews.schedule",
+        key=x_idempotency_key,
+        payload=idem_payload,
+    )
+    if idem_response is not None:
+        return InterviewWithInterviewers.model_validate(idem_response)
+
     # ── Find or auto-create candidate ──────────────────────────────────────────
     result = await db.execute(select(User).where(User.email == payload.candidate_email))
     candidate = result.scalar_one_or_none()
@@ -191,13 +211,16 @@ async def schedule_interview(
     )
 
     loaded = await _load_interview(interview.id, db)
-    return _to_schema(loaded, temp_password)
+    response = _to_schema(loaded, temp_password)
+    await store_idempotency_response(db, idem_record, response.model_dump(mode="json"))
+    return response
 
 
 @router.post("/{interview_id}/resume")
 async def upload_resume(
     interview_id: str,
     file: UploadFile = File(...),
+    x_idempotency_key: Optional[str] = Header(default=None, alias="X-Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_hr),
 ):
@@ -214,6 +237,19 @@ async def upload_resume(
 
     dest = uploads_dir / f"{interview_id}{ext}"
     content = await file.read()
+    idem_payload = {
+        "interview_id": interview_id,
+        "filename": file.filename or f"resume{ext}",
+        "content_len": len(content),
+    }
+    idem_record, idem_response = await check_idempotency(
+        db,
+        scope="interviews.resume_upload",
+        key=x_idempotency_key,
+        payload=idem_payload,
+    )
+    if idem_response is not None:
+        return idem_response
     dest.write_bytes(content)
 
     async def _fallback_extract():
@@ -234,7 +270,9 @@ async def upload_resume(
     iv.resume_text = resume_text[:8000] if resume_text else None
     await db.flush()
 
-    return {"success": True, "filename": file.filename, "has_text": bool(resume_text)}
+    response = {"success": True, "filename": file.filename, "has_text": bool(resume_text)}
+    await store_idempotency_response(db, idem_record, response)
+    return response
 
 
 @router.get("/", response_model=List[InterviewWithInterviewers])
