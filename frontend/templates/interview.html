@@ -607,6 +607,11 @@ function _getAudioCtx(){
 
 // ── Session counter — incremented on every startL(), used to kill stale loops ─
 let _vadSession = 0;
+const VAD_CHECK_MS = 150;
+const VAD_SILENCE_SEND_MS = 2000;
+const VAD_CALIBRATION_MS = 300;
+const VAD_CALIB_FRAMES = Math.max(1, Math.round(VAD_CALIBRATION_MS / VAD_CHECK_MS));
+const _sttSessionMeta = new Map();
 
 // ── Detect best supported MIME type (F4) ──────────────────────────────────────
 function _bestMime(){
@@ -658,6 +663,7 @@ function startL(){
 
   // Increment session ID — any stale VAD loop will see a different ID and stop (F2, F6)
   const mySession = ++_vadSession;
+  _sttSessionMeta.set(mySession, {startedAt: performance.now(), sendAt: null});
 
   try{
     const audioOnly = new MediaStream(camStream.getAudioTracks());
@@ -720,16 +726,16 @@ function _startVAD(stream, mySession){
     source.connect(analyser);
 
     const buf           = new Uint8Array(analyser.frequencyBinCount);
-    const CHECK_MS      = 150;
-    const SILENCE_SEND  = 3000;  // ms of silence before auto-send
+    const CHECK_MS      = VAD_CHECK_MS;
+    const SILENCE_SEND  = VAD_SILENCE_SEND_MS;  // ms of silence before auto-send
     const MIN_CHUNKS    = 2;     // must have captured at least 2 chunks (prevents instant-fire)
     let   silentMs      = 0;
     let   speakingEver  = false; // only auto-send if the candidate actually spoke
 
-    // F8: calibrate silence threshold from first 600ms of ambient noise
+    // F8: calibrate silence threshold from first ~300ms of ambient noise
     let   THRESH        = 18;    // sensible default
     let   calibFrames   = 0;
-    const CALIB_FRAMES  = 4;     // 4 × 150ms = 600ms calibration window
+    const CALIB_FRAMES  = VAD_CALIB_FRAMES;
     let   calibSum      = 0;
 
     function check(){
@@ -760,8 +766,10 @@ function _startVAD(stream, mySession){
         speakingEver = true;
       } else {
         silentMs += CHECK_MS;
-        // Auto-send only if: 4s silence AND candidate actually spoke AND have chunks
+        // Auto-send only if: silence window elapsed AND candidate actually spoke AND have chunks
         if(speakingEver && silentMs >= SILENCE_SEND && whisperChunks.length >= MIN_CHUNKS){
+          const meta = _sttSessionMeta.get(mySession);
+          if(meta && !meta.sendAt) meta.sendAt = performance.now();
           stopL();   // triggers onstop → _sendToWhisper
           return;
         }
@@ -782,6 +790,10 @@ async function _sendToWhisper(chunks, sessionId){
   const mimeType = _AUDIO_MIME || 'audio/webm';
   const blob = new Blob(chunks, {type: mimeType});
   if(blob.size < 200) return;   // F5: was 1000, now 200
+  const meta = _sttSessionMeta.get(sessionId);
+  const now = performance.now();
+  const vadWaitMs = meta && meta.sendAt ? (meta.sendAt - meta.startedAt) : null;
+  console.info('[STT] capture_ready', {sessionId, blobSize: blob.size, vad_wait_ms: vadWaitMs});
 
   document.getElementById('sttStat').textContent = '⏳ Transcribing…';
   try{
@@ -789,12 +801,15 @@ async function _sendToWhisper(chunks, sessionId){
     fd.append('audio', blob, 'audio.webm');
     fd.append('language', 'en');
     const t = localStorage.getItem('token');
+    const reqStarted = performance.now();
     const res = await fetch(API+'/stt/transcribe',{
       method: 'POST',
       headers: {Authorization: 'Bearer '+t},
       credentials: 'include',
       body: fd,
     });
+    const reqEnded = performance.now();
+    console.info('[STT] request_complete', {sessionId, http_ms: Math.round(reqEnded - reqStarted), blobSize: blob.size, vad_wait_ms: vadWaitMs});
     if(!res.ok) throw new Error('STT HTTP ' + res.status);
     const data = await res.json();
 
@@ -823,6 +838,8 @@ async function _sendToWhisper(chunks, sessionId){
       document.getElementById('sttStat').textContent = '';
       if(voiceOn && !isRecording && !aiPaused) startL();
     }, 2000);
+  }finally{
+    _sttSessionMeta.delete(sessionId);
   }
 }
 
